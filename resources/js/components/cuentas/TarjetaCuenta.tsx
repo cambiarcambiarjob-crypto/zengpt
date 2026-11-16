@@ -1,4 +1,4 @@
-import { Pencil, StickyNote, Trash2 } from 'lucide-react';
+import { Link2, Pencil, StickyNote, Trash2 } from 'lucide-react';
 import { memo } from 'react';
 import { BarraEspacios } from '@/components/ui/BarraEspacios';
 import { Boton } from '@/components/ui/Boton';
@@ -40,6 +40,9 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
     // Días de calendario entre «hoy» del negocio y el vencimiento, con las dos fechas que manda el servidor
     // (fechas puras: no dependen de la hora ni de la zona horaria).
     const dias = diasEntre(hoy, cuenta.expires_on);
+    // Ligas de invitación capturadas y vigentes (una por espacio).
+    const ligas = cuenta.invite_links.filter((liga) => liga.url && (!liga.expires_on || liga.expires_on >= hoy)).length;
+    const capacidad = cuenta.invite_links.length;
 
     return (
         <article
@@ -58,6 +61,18 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                             <Copiable texto={cuenta.email} etiqueta="Gmail de la cuenta" className="py-0.5" />
                         </h2>
                         <Insignia estado={estado} />
+                        {ligas > 0 && (
+                            <span
+                                className={cn(
+                                    'inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border px-2 text-[11px] font-semibold tracking-wide whitespace-nowrap uppercase',
+                                    ligas >= capacidad ? 'border-info/40 bg-info/12 text-info' : 'border-borde-fuerte bg-superficie-2 text-suave',
+                                )}
+                                title={ligas >= capacidad ? 'Las 5 ligas de invitación están capturadas y vigentes' : `${ligas} de ${capacidad} ligas de invitación capturadas y vigentes`}
+                            >
+                                <Link2 className="size-3" aria-hidden="true" />
+                                {ligas >= capacidad ? `${capacidad} ligas listas` : `${ligas}/${capacidad} ligas`}
+                            </span>
+                        )}
                     </div>
                     <p className="mt-1 text-[13px] leading-snug text-suave">
                         {vencida ? 'Venció el ' : 'Vence el '}
