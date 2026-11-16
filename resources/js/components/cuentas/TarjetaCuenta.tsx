@@ -8,6 +8,7 @@ import { diasEnPalabras, diasEntre, dinero, fechaCorta } from '@/lib/formato';
 import type { Cuenta, Espacio } from '@/types';
 import { CasillaLibre, CasillaOcupada } from './CasillaEspacio';
 import { Copiable } from './Copiable';
+import { GoogleCuenta } from './GoogleCuenta';
 import { coincideEspacio } from './utilidades';
 
 export interface TarjetaCuentaProps {
@@ -110,6 +111,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                             </span>
                         </p>
                     )}
+                    <GoogleCuenta cuenta={cuenta} />
                 </div>
 
                 <div className="flex shrink-0 items-center gap-4 sm:gap-5">

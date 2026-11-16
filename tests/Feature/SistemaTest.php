@@ -9,10 +9,12 @@ use App\Models\Seller;
 use App\Models\Slot;
 use App\Models\User;
 use App\Support\Hoy;
+use App\Support\Presentar;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Process;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -358,5 +360,46 @@ class SistemaTest extends TestCase
         $this->actingAs($this->socio)->get("/dia/{$ayer}")->assertInertia(fn (Assert $page) => $page->where('reparto.totales.ventas', 20000));
         $this->actingAs($this->socio)->get("/dia/{$hoy}")->assertInertia(fn (Assert $page) => $page->where('reparto.totales.ventas', 40000));
         $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $page) => $page->where('cuentas.pendientes_pago', 0));
+    }
+
+    public function test_revisar_el_grupo_en_google_marca_a_cada_cliente(): void
+    {
+        config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com']]);
+        $cuenta = $this->cuenta(['email' => 'admin.grupo@gmail.com']);
+        $otra = $this->cuenta();
+        $jorge = $this->vendedor('Jorge');
+        foreach (['dentro@gmail.com', 'pendiente@gmail.com', 'fuera@gmail.com'] as $i => $correo) {
+            Slot::query()->create(['account_id' => $cuenta->id, 'position' => $i + 1, 'client_email' => $correo, 'price_cents' => 20000, 'seller_id' => $jorge->id, 'sold_on' => Hoy::fecha(), 'invite_accepted_at' => $correo === 'fuera@gmail.com' ? now() : null]);
+        }
+
+        Process::fake(['*' => Process::result(json_encode([
+            'ok' => true, 'admin' => 'admin.grupo@gmail.com',
+            'miembros' => [['email' => 'admin.grupo@gmail.com', 'nombre' => 'Admin', 'admin' => true], ['email' => 'dentro@gmail.com', 'nombre' => 'Ana', 'admin' => false], ['email' => 'colado@gmail.com', 'nombre' => 'X', 'admin' => false]],
+            'invitaciones' => [['email' => 'pendiente@gmail.com', 'caduca' => '30 nov']],
+        ]))]);
+
+        $this->assertTrue(Presentar::cuenta($cuenta->load('slots'))['google']['conectada']);
+        $this->assertFalse(Presentar::cuenta($otra->load('slots'))['google']['conectada']);
+
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('success');
+        Process::assertRan(fn ($proceso) => in_array('leer', (array) $proceso->command, true));
+
+        $estado = Slot::query()->where('account_id', $cuenta->id)->pluck('google_status', 'client_email');
+        $this->assertSame('miembro', $estado['dentro@gmail.com']);
+        $this->assertSame('invitado', $estado['pendiente@gmail.com']);
+        $this->assertSame('ausente', $estado['fuera@gmail.com']);
+        $this->assertSame('aceptada', Slot::query()->where('client_email', 'dentro@gmail.com')->first()->inviteStatus());
+        $this->assertNull(Slot::query()->where('client_email', 'fuera@gmail.com')->first()->invite_accepted_at);
+        $this->assertSame([['email' => 'colado@gmail.com', 'tipo' => 'miembro']], $cuenta->fresh()->google_extra);
+
+        // Cuenta sin sesión en el servidor, o sesión de otra cuenta: no toca nada.
+        $this->actingAs($this->socio)->post("/cuentas/{$otra->id}/google")->assertSessionHas('error');
+        config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com', $otra->email]]);
+        $this->actingAs($this->socio)->post("/cuentas/{$otra->id}/google")->assertSessionHas('error');
+        $this->assertNull($otra->fresh()->google_synced_at);
+
+        // Google cerró la sesión: aviso claro.
+        Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'sin_sesion']), exitCode: 1)]);
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('error', 'Google cerró la sesión del servidor: hay que volver a iniciar sesión en la cuenta.');
     }
 }

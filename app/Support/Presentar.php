@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Account;
 use App\Models\Slot;
+use App\Services\GrupoGoogle;
 
 /** Forma en que las cuentas y los espacios viajan a las pantallas (Inertia). */
 final class Presentar
@@ -31,6 +32,11 @@ final class Presentar
             'ingresos' => (int) $account->slots->whereNotNull('paid_on')->sum('price_cents'),
             'pendientes_pago' => $account->slots->whereNull('paid_on')->count(),
             'espacios' => $espacios,
+            'google' => [
+                'conectada' => GrupoGoogle::conectada($account),
+                'revisada' => $account->google_synced_at?->toIso8601String(),
+                'extra' => $account->google_extra ?? [],
+            ],
         ];
     }
 
@@ -52,6 +58,7 @@ final class Presentar
             'invite_url' => $slot->invite_url,
             'invite_expires_on' => $slot->invite_expires_on?->toDateString(),
             'invite_status' => $slot->inviteStatus(),
+            'google_status' => $slot->google_status,
         ];
     }
 }

@@ -17,6 +17,8 @@ export interface Espacio {
     seller_id: number; seller_name: string | null; sold_on: string; paid_on: string | null;
     invite_url: string | null; invite_expires_on: string | null;
     invite_status: 'sin_liga' | 'lista' | 'enviada' | 'aceptada' | 'caducada';
+    /** Lo que dice Google en la última revisión del grupo (null = nunca se revisó). */
+    google_status: 'miembro' | 'invitado' | 'ausente' | null;
 }
 
 export interface Cuenta {
@@ -24,6 +26,8 @@ export interface Cuenta {
     invite_links: { position: number; url: string | null; expires_on: string | null }[]; started_on: string; expires_on: string; dias_restantes: number;
     activa: boolean; por_vencer: boolean; notes: string | null;
     capacidad: number; ocupados: number; libres: number; ingresos: number; pendientes_pago: number; espacios: Espacio[];
+    /** Sincronización con el grupo familiar de Google (solo cuentas con sesión abierta en el servidor). */
+    google: { conectada: boolean; revisada: string | null; extra: { email: string; tipo: 'miembro' | 'invitado' }[] };
 }
 
 /** Reparto de un periodo: ventas − publicidad − costo de cuentas = neto; socio 10 %; el resto, mitad vendedor y mitad dueño. */

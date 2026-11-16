@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Models\Seller;
+use App\Services\GrupoGoogle;
 use App\Support\Hoy;
 use App\Support\Presentar;
 use Illuminate\Http\RedirectResponse;
@@ -12,6 +13,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 class AccountController extends Controller
 {
@@ -101,6 +103,25 @@ class AccountController extends Controller
      * @param  array<string, mixed>  $data
      * @return array<string, array{url: string, expires_on: string}>|null
      */
+    /** Revisa en Google (solo lectura) quién está en el grupo familiar de la cuenta y actualiza a sus clientes. */
+    public function google(Account $account, GrupoGoogle $grupo): RedirectResponse
+    {
+        try {
+            $r = $grupo->sincronizar($account);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $partes = array_filter([
+            $r['miembros'] ? "{$r['miembros']} en el grupo" : null,
+            $r['invitados'] ? "{$r['invitados']} con invitación pendiente" : null,
+            $r['ausentes'] ? "{$r['ausentes']} que no aparecen" : null,
+            $r['extra'] ? "{$r['extra']} en Google que no están en el sistema" : null,
+        ]);
+
+        return back()->with('success', 'Revisado en Google: '.($partes ? implode(' · ', $partes) : 'el grupo está vacío').'.');
+    }
+
     private function ligas(array $data): ?array
     {
         $ligas = [];

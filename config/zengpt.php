@@ -22,6 +22,16 @@ return [
     'zona' => 'America/Chihuahua',
 
     /*
+    | Lectura del grupo familiar de Google con el navegador del servidor (zenbot). ZENBOT_CUENTAS: correos de las
+    | cuentas cuya sesión está abierta allí, separados por coma.
+    */
+    'google' => [
+        'node' => env('ZENBOT_NODE', 'node'),
+        'script' => env('ZENBOT_SCRIPT', '/opt/zenbot/familia.cjs'),
+        'cuentas' => explode(',', (string) env('ZENBOT_CUENTAS', '')),
+    ],
+
+    /*
     | Correo de invitación al grupo familiar que recibe cada cliente. Los textos se editan aquí.
     */
     'invitacion' => [
