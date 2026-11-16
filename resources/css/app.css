@@ -2,3 +2,280 @@
 
 @source '../views';
 @source '../js';
+
+/*
+| Sistema de diseño de ZenGPT · «tinta y jade».
+| Oscuro, sobrio, con un solo acento de marca (jade). Guía completa: docs/INTERFAZ.md
+*/
+
+/* Tipografías servidas desde el propio sitio (paquetes @fontsource-variable; solo el subconjunto latino). */
+@font-face {
+    font-family: 'Geist Variable';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url('@fontsource-variable/geist/files/geist-latin-wght-normal.woff2') format('woff2-variations');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: 'Sora Variable';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 800;
+    src: url('@fontsource-variable/sora/files/sora-latin-wght-normal.woff2') format('woff2-variations');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@theme {
+    /* Tipografía: Geist para la interfaz y los números; Sora para títulos y marca. */
+    --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-titulo: 'Sora Variable', 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
+
+    /* Superficies (de más profunda a más elevada) */
+    --color-fondo: #090c0b;
+    --color-superficie: #0f1413;
+    --color-superficie-2: #151b19;
+    --color-superficie-3: #1c2422;
+
+    /* Bordes */
+    --color-borde: #222b28;
+    --color-borde-fuerte: #33403b;
+
+    /* Texto (los tres cumplen AA sobre fondo y superficies) */
+    --color-texto: #e8eeeb;
+    --color-suave: #a4b1ac;
+    --color-tenue: #7f8d88;
+
+    /* Acento de marca: jade */
+    --color-acento: #34d8a6;
+    --color-acento-fuerte: #6ee9c2;
+    --color-acento-hondo: #0f6f55;
+    --color-sobre-acento: #03140e;
+
+    /* Estados */
+    --color-exito: #5fd47a;
+    --color-alerta: #f2b84b;
+    --color-peligro: #f26d6d;
+    --color-info: #70b7f2;
+
+    /* Radios */
+    --radius-campo: 0.625rem;
+    --radius-tarjeta: 1rem;
+    --radius-panel: 1.375rem;
+
+    /* Sombras */
+    --shadow-tarjeta: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -18px rgb(0 0 0 / 0.7);
+    --shadow-flotante: 0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 32px 80px -24px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(0 0 0 / 0.4);
+    --shadow-brillo: 0 0 0 1px rgb(52 216 166 / 0.35), 0 8px 28px -8px rgb(52 216 166 / 0.45);
+
+    /* Movimiento (todo se apaga solo con prefers-reduced-motion; ver más abajo) */
+    --ease-suave: cubic-bezier(0.22, 1, 0.36, 1);
+    --animate-entrada: zg-entrada 0.5s var(--ease-suave) both;
+    --animate-aparecer: zg-aparecer 0.3s ease-out both;
+    --animate-emerger: zg-emerger 0.28s var(--ease-suave) both;
+    --animate-subir: zg-subir 0.34s var(--ease-suave) both;
+    --animate-enfocar: zg-enfocar 0.7s var(--ease-suave) both;
+    --animate-aviso: zg-aviso 0.36s var(--ease-suave) both;
+
+    @keyframes zg-entrada {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes zg-aparecer {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes zg-emerger {
+        from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.97);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    @keyframes zg-subir {
+        from {
+            opacity: 0.6;
+            transform: translateY(100%);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes zg-enfocar {
+        from {
+            opacity: 0;
+            filter: blur(10px);
+            transform: translateY(0.35em);
+        }
+        to {
+            opacity: 1;
+            filter: blur(0);
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes zg-aviso {
+        from {
+            opacity: 0;
+            transform: translateY(-8px) scale(0.98);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+}
+
+/* Cifras (dinero, conteos): tabulares y alineadas para que las columnas no «bailen». */
+@utility cifras {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: 'tnum' 1;
+}
+
+/* Rejilla tenue de fondo para zonas decorativas (login, estados vacíos). */
+@utility fondo-rejilla {
+    background-image:
+        linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
+        linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+}
+
+/* Respeta el área segura de los celulares con muesca / barra de gestos. */
+@utility pb-seguro {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@layer base {
+    html {
+        color-scheme: dark;
+        background-color: var(--color-fondo);
+        -webkit-text-size-adjust: 100%;
+        scrollbar-color: var(--color-borde-fuerte) transparent;
+        scrollbar-width: thin;
+    }
+
+    body {
+        min-height: 100dvh;
+        background-color: var(--color-fondo);
+        color: var(--color-texto);
+        font-family: var(--font-sans);
+        font-size: 0.9375rem;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+    }
+
+    h1,
+    h2,
+    h3 {
+        font-family: var(--font-titulo);
+        letter-spacing: -0.02em;
+    }
+
+    ::selection {
+        background-color: rgb(52 216 166 / 0.3);
+        color: var(--color-texto);
+    }
+
+    /* Foco visible y uniforme para teclado en todo el sistema. */
+    :focus-visible {
+        outline: 2px solid var(--color-acento);
+        outline-offset: 2px;
+    }
+
+    :focus:not(:focus-visible) {
+        outline: none;
+    }
+
+    button,
+    [role='button'],
+    summary {
+        cursor: pointer;
+    }
+
+    button:disabled,
+    [aria-disabled='true'] {
+        cursor: not-allowed;
+    }
+
+    /* Los campos de número no muestran flechitas; las fechas usan el selector oscuro del navegador. */
+    input[type='number'] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+
+    input[type='number']::-webkit-outer-spin-button,
+    input[type='number']::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    input[type='date'] {
+        color-scheme: dark;
+    }
+
+    /* El autorrelleno del navegador no rompe el tema oscuro. */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+        -webkit-text-fill-color: var(--color-texto);
+        caret-color: var(--color-texto);
+        box-shadow: 0 0 0 1000px var(--color-superficie-2) inset;
+        transition: background-color 9999s ease-out;
+    }
+
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background-color: var(--color-borde-fuerte);
+        border: 2px solid transparent;
+        border-radius: 999px;
+        background-clip: padding-box;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+}
+
+/* Sin movimiento: todo aparece en su estado final, sin transiciones ni animaciones. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-delay: 0ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        transition-delay: 0ms !important;
+        scroll-behavior: auto !important;
+    }
+}
