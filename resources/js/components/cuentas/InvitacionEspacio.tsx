@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { Check, Copy, ExternalLink, Link2, MessageCircle, RotateCcw, Send } from 'lucide-react';
+import { Check, Copy, ExternalLink, Link2, Mail, MessageCircle, RotateCcw, Send } from 'lucide-react';
 import { useState } from 'react';
 import { avisar } from '@/components/ui/Avisos';
 import { Boton } from '@/components/ui/Boton';
@@ -26,7 +26,7 @@ const ESTADOS: Record<Espacio['invite_status'], { texto: string; clase: string }
 function mensaje(espacio: Espacio): string {
     const vence = espacio.invite_expires_on ? ` La liga vence el ${fechaCorta(espacio.invite_expires_on)}.` : '';
 
-    return `¡Hola! Esta es tu invitación al grupo familiar de Google: ${espacio.invite_url}\n\nÁbrela con tu cuenta ${espacio.client_email} y acepta la invitación.${vence}`;
+    return `¡Hola! Ya está listo tu Google One Pro por 12 meses 🎉\n\nAcepta tu invitación aquí: ${espacio.invite_url}\n\nEntra con tu cuenta ${espacio.client_email} y acepta unirte al grupo familiar.${vence}`;
 }
 
 /** wa.me con el número en formato internacional (a 10 dígitos de México se les antepone 52). */
@@ -132,6 +132,19 @@ function DialogoInvitacion({ espacio, alCerrar }: { espacio: Espacio; alCerrar: 
                         <p className="text-[13px] text-suave">
                             Estado: <span className="font-medium text-texto">{ESTADOS[espacio.invite_status].texto}</span>
                         </p>
+                        <button
+                            type="button"
+                            disabled={enviando || espacio.invite_status === 'caducada'}
+                            onClick={() => {
+                                setEnviando(true);
+                                router.post(`/espacios/${espacio.id}/invitacion/correo`, {}, { preserveScroll: true, preserveState: true, onFinish: () => setEnviando(false) });
+                            }}
+                            className="flex h-12 w-full items-center justify-center gap-2 rounded-campo bg-gradient-to-br from-[#22c55e] to-[#15803d] px-4 text-[15px] font-semibold text-white shadow-[0_6px_20px_-6px_rgba(34,197,94,0.6)] transition-[opacity,transform] hover:opacity-95 active:scale-[0.98] disabled:opacity-50"
+                        >
+                            <Mail className="size-4" aria-hidden="true" />
+                            {espacio.invite_status === 'enviada' ? 'Reenviar invitación por correo' : 'Enviar invitación por correo'}
+                        </button>
+                        <p className="-mt-1 text-xs text-tenue">Le llega a {espacio.client_email} con el botón verde «Adquiere Google One Pro por 12 meses» y los beneficios.</p>
                         <div className="flex flex-wrap gap-2">
                             {espacio.client_phone && (
                                 <a

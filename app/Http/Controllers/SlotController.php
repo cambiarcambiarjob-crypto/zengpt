@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\InvitacionGrupo;
 use App\Models\Account;
 use App\Models\Slot;
 use App\Support\Hoy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 class SlotController extends Controller
@@ -81,6 +83,34 @@ class SlotController extends Controller
         $slot->save();
 
         return back()->with('success', 'Invitación actualizada.');
+    }
+
+    /** Manda al cliente el correo con su liga (botón verde) y marca la invitación como enviada. */
+    public function enviarCorreo(Slot $slot): RedirectResponse
+    {
+        if ($slot->invite_url === null) {
+            return back()->with('error', 'Primero guarda la liga de invitación de este cliente.');
+        }
+
+        if ($slot->inviteStatus() === 'caducada') {
+            return back()->with('error', 'La liga ya caducó: genera una nueva en Google y guárdala.');
+        }
+
+        if (app()->isProduction() && in_array(config('mail.default'), ['log', 'array'], true)) {
+            return back()->with('error', 'El correo de envío todavía no está configurado en el servidor.');
+        }
+
+        try {
+            Mail::to($slot->client_email)->send(new InvitacionGrupo($slot));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'No se pudo enviar el correo. Intenta de nuevo en unos minutos.');
+        }
+
+        $slot->update(['invite_sent_at' => now()]);
+
+        return back()->with('success', "Invitación enviada a {$slot->client_email}.");
     }
 
     public function destroy(Slot $slot): RedirectResponse

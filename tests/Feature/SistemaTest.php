@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\InvitacionGrupo;
 use App\Models\Account;
 use App\Models\AdSpend;
 use App\Models\Seller;
@@ -11,6 +12,7 @@ use App\Support\Hoy;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -243,5 +245,26 @@ class SistemaTest extends TestCase
 
         $this->actingAs($this->socio)->get('/cuentas')->assertInertia(fn (Assert $page) => $page->where('cuentas.0.espacios.0.invite_status', 'caducada'));
         $this->actingAs($this->socio)->put("/espacios/{$slot->id}/invitacion", ['invite_url' => 'no-es-liga'])->assertSessionHasErrors('invite_url');
+    }
+
+    public function test_correo_de_invitacion_con_boton_verde(): void
+    {
+        Mail::fake();
+        $cuenta = $this->cuenta();
+        $slot = Slot::query()->create(['account_id' => $cuenta->id, 'position' => 1, 'client_email' => 'cliente@gmail.com', 'price_cents' => 20000, 'seller_id' => $this->vendedor('Jorge')->id, 'sold_on' => Hoy::fecha()]);
+
+        $this->actingAs($this->socio)->post("/espacios/{$slot->id}/invitacion/correo")->assertSessionHas('error');
+        Mail::assertNothingSent();
+
+        $slot->update(['invite_url' => 'https://families.example/join/abc', 'invite_expires_on' => Hoy::carbon()->addDays(7)->toDateString()]);
+        $this->actingAs($this->socio)->post("/espacios/{$slot->id}/invitacion/correo")->assertSessionHas('success');
+
+        Mail::assertSent(InvitacionGrupo::class, fn ($m) => $m->hasTo('cliente@gmail.com'));
+        $this->assertSame('enviada', $slot->fresh()->inviteStatus());
+
+        $html = (new InvitacionGrupo($slot->fresh()))->render();
+        $this->assertStringContainsString('Adquiere Google One Pro por 12 meses', $html);
+        $this->assertStringContainsString('href="https://families.example/join/abc"', $html);
+        $this->assertStringContainsString('cliente@gmail.com', $html);
     }
 }
