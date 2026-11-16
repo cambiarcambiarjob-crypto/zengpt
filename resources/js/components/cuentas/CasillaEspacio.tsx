@@ -84,18 +84,8 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
             </div>
 
             <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-                <InvitacionEspacio espacio={espacio} />
-                {espacio.google_status === 'invitado' && (
-                    <span className="inline-flex h-6 items-center rounded-[5px] bg-info/12 px-2 text-[11px] font-medium whitespace-nowrap text-info" title="Según la última revisión en Google, tiene la invitación pendiente">
-                        Invitado en Google
-                    </span>
-                )}
-                {espacio.google_status === 'ausente' && (
-                    <span className="inline-flex h-6 items-center rounded-[5px] bg-peligro/12 px-2 text-[11px] font-medium whitespace-nowrap text-peligro" title="En la última revisión no apareció en el grupo ni con invitación pendiente">
-                        No está en Google
-                    </span>
-                )}
-                <GoogleEspacio cuenta={cuenta} espacio={espacio} />
+                {/* Cuenta con su sesión de Google en el servidor: una sola invitación, la de Google. */}
+                {cuenta.google.conectada ? <GoogleEspacio cuenta={cuenta} espacio={espacio} /> : <InvitacionEspacio espacio={espacio} />}
             </div>
 
             {/* Angosta (celular): teléfono y venta en un mismo renglón. Con más ancho, uno bajo el otro y la venta al pie. */}

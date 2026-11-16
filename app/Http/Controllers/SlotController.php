@@ -166,7 +166,7 @@ class SlotController extends Controller
         return back()->with('success', "Invitación de Google enviada a {$slot->client_email}.");
     }
 
-    /** Saca al cliente del grupo de Google (o cancela su invitación). Su espacio en el sistema no se toca. */
+    /** Saca al cliente del grupo de Google (o cancela su invitación) y libera su espacio en el sistema. */
     public function googleSacar(Slot $slot, GrupoGoogle $grupo): RedirectResponse
     {
         try {
@@ -175,7 +175,7 @@ class SlotController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "{$slot->client_email} ya no está en el grupo de Google.");
+        return back()->with('success', "{$slot->client_email} salió del grupo de Google y se liberó su espacio.");
     }
 
     public function destroy(Slot $slot): RedirectResponse

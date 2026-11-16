@@ -414,8 +414,13 @@ class SistemaTest extends TestCase
         Process::fake(['*' => Process::result(json_encode(['ok' => true, 'sacado' => 'fuera@gmail.com', 'era' => 'invitacion']))]);
         $this->actingAs($this->socio)->delete("/espacios/{$fuera->id}/google")->assertSessionHas('success');
         Process::assertRan(fn ($proceso) => array_slice((array) $proceso->command, -2) === ['sacar', 'fuera@gmail.com']);
-        $this->assertSame('ausente', $fuera->fresh()->google_status);
-        $this->assertNotNull($fuera->fresh()); // sigue en el sistema
+        $this->assertNull($fuera->fresh()); // sacarlo de Google también libera su espacio
+
+        // Si Google ya no lo tenía, igual se libera el espacio.
+        Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'no_encontrado']), exitCode: 1)]);
+        $pendiente = Slot::query()->where('client_email', 'pendiente@gmail.com')->first();
+        $this->actingAs($this->socio)->delete("/espacios/{$pendiente->id}/google")->assertSessionHas('success');
+        $this->assertNull($pendiente->fresh());
 
         // Alta con «invitar en Google al guardar».
         Process::fake(['*' => Process::result(json_encode(['ok' => true, 'invitado' => 'nuevo@gmail.com']))]);

@@ -49,12 +49,24 @@ class GrupoGoogle
         $slot->forceFill(['google_status' => 'invitado', 'invite_sent_at' => $slot->invite_sent_at ?? now(), 'invite_accepted_at' => null])->save();
     }
 
-    /** Saca al cliente del grupo (o cancela su invitación pendiente). Sigue en el sistema: liberar su espacio es aparte. */
+    /**
+     * Saca al cliente del grupo (o cancela su invitación pendiente) y libera su espacio en el sistema.
+     * Si Google ya no lo tenía, igual se libera el espacio.
+     */
     public function sacar(Slot $slot): void
     {
-        $this->ejecutar($slot->account, ['sacar', $slot->client_email], 80);
-        $slot->forceFill(['google_status' => 'ausente', 'invite_accepted_at' => null, 'invite_sent_at' => null])->save();
+        try {
+            $this->ejecutar($slot->account, ['sacar', $slot->client_email], 80);
+        } catch (RuntimeException $e) {
+            if ($e->getCode() !== self::NO_ENCONTRADO) {
+                throw $e;
+            }
+        }
+
+        $slot->delete();
     }
+
+    private const NO_ENCONTRADO = 404;
 
     /**
      * Marca a cada cliente como miembro / invitado / ausente según Google y da de alta (sin precio ni vendedor,
@@ -158,7 +170,7 @@ class GrupoGoogle
         }
 
         if (! ($datos['ok'] ?? false)) {
-            throw new RuntimeException(match ($datos['error'] ?? '') {
+            throw new RuntimeException(code: ($datos['error'] ?? '') === 'no_encontrado' ? self::NO_ENCONTRADO : 0, message: match ($datos['error'] ?? '') {
                 'sin_sesion' => 'Google cerró la sesión del servidor: hay que volver a iniciar sesión en la cuenta.',
                 'sin_navegador' => 'El navegador del servidor no está encendido.',
                 'otra_cuenta' => 'La sesión del servidor es de otra cuenta: no se hizo nada.',
