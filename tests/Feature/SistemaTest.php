@@ -435,6 +435,26 @@ class SistemaTest extends TestCase
 
         // Google cerró la sesión: aviso claro.
         Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'sin_sesion']), exitCode: 1)]);
-        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('error', 'Google cerró la sesión del servidor: hay que volver a iniciar sesión en la cuenta.');
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('error', 'Google cerró la sesión del servidor: entra con «Iniciar sesión (visor)» en la cuenta.');
+    }
+
+    public function test_el_visor_de_google_es_solo_del_administrador(): void
+    {
+        config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com']]);
+        $cuenta = $this->cuenta(['email' => 'admin.grupo@gmail.com', 'password' => 'clave-de-prueba', 'twofa_url' => 'https://api2fa.com/GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ']);
+        $otra = $this->cuenta();
+
+        // nginx pregunta a /zenbot/autorizar: sin sesión o socio → 403; administrador → 204.
+        $this->get('/zenbot/autorizar')->assertForbidden();
+        $this->actingAs($this->socio)->get('/zenbot/autorizar')->assertForbidden();
+        $this->actingAs($this->admin)->get('/zenbot/autorizar')->assertNoContent();
+
+        $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertForbidden();
+        $this->actingAs($this->admin)->get("/google/visor/{$otra->id}")->assertNotFound();
+        $this->actingAs($this->admin)->get("/google/visor/{$cuenta->id}")->assertOk()->assertSee('admin.grupo@gmail.com')->assertSee('Pegar en el visor')->assertHeader('Cache-Control', 'no-store, private');
+
+        $codigo = $this->actingAs($this->admin)->getJson("/google/visor/{$cuenta->id}/codigo")->assertOk()->json();
+        $this->assertMatchesRegularExpression('/^\d{6}$/', $codigo['codigo']);
+        $this->actingAs($this->socio)->getJson("/google/visor/{$cuenta->id}/codigo")->assertForbidden();
     }
 }

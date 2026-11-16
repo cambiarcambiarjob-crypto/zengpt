@@ -42,6 +42,12 @@ class GrupoGoogle
         return ['admin' => $datos['admin'] ?? null, 'miembros' => $datos['miembros'] ?? [], 'invitaciones' => $datos['invitaciones'] ?? []];
     }
 
+    /** Deja el Chrome del servidor en el inicio de sesión de Google, para terminarlo a mano en el visor. */
+    public function abrirLogin(Account $account): void
+    {
+        $this->ejecutar($account, ['abrir-login'], 40);
+    }
+
     /** Manda la invitación de Google al cliente y lo marca como invitado. */
     public function invitar(Slot $slot): void
     {
@@ -190,7 +196,7 @@ class GrupoGoogle
 
         if (! ($datos['ok'] ?? false)) {
             throw new RuntimeException(code: ($datos['error'] ?? '') === 'no_encontrado' ? self::NO_ENCONTRADO : 0, message: match ($datos['error'] ?? '') {
-                'sin_sesion' => 'Google cerró la sesión del servidor: hay que volver a iniciar sesión en la cuenta.',
+                'sin_sesion' => 'Google cerró la sesión del servidor: entra con «Iniciar sesión (visor)» en la cuenta.',
                 'sin_navegador' => 'El navegador del servidor no está encendido.',
                 'otra_cuenta' => 'La sesión del servidor es de otra cuenta: no se hizo nada.',
                 'no_encontrado' => 'Ese cliente no está en el grupo de Google (ni con invitación pendiente).',

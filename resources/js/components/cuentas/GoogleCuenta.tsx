@@ -1,7 +1,8 @@
 import { router } from '@inertiajs/react';
-import { RefreshCw, TriangleAlert } from 'lucide-react';
+import { LogIn, RefreshCw, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
+import { usePagina } from '@/lib/pagina';
 import type { Cuenta } from '@/types';
 
 /** «hace 5 min», «hoy 14:32» o «16 nov 14:32». */
@@ -21,6 +22,7 @@ function cuando(iso: string): string {
  */
 export function GoogleCuenta({ cuenta }: { cuenta: Cuenta }) {
     const [revisando, setRevisando] = useState(false);
+    const { auth } = usePagina();
     if (!cuenta.google.conectada) return null;
 
     const revisar = () => {
@@ -42,6 +44,18 @@ export function GoogleCuenta({ cuenta }: { cuenta: Cuenta }) {
                     {revisando ? 'Revisando en Google…' : 'Revisar grupo en Google'}
                 </button>
                 <span className="text-xs text-tenue">{cuenta.google.revisada ? `Revisado ${cuando(cuenta.google.revisada)}` : 'Aún no se ha revisado'}</span>
+                {auth.user?.is_admin && (
+                    <a
+                        href={`/google/visor/${cuenta.id}`}
+                        target="_blank"
+                        rel="noopener"
+                        className="inline-flex items-center gap-1 text-xs text-acento underline-offset-2 hover:underline"
+                        title="Abre el Chrome del servidor para iniciar sesión a mano en Google, con los datos de la cuenta para copiar y pegar"
+                    >
+                        <LogIn className="size-3.5" aria-hidden="true" />
+                        Iniciar sesión (visor)
+                    </a>
+                )}
             </div>
             {cuenta.google.extra.length > 0 && (
                 <div className="flex max-w-2xl items-start gap-1.5 rounded-[5px] border border-alerta/30 bg-alerta/8 px-2.5 py-1.5 text-xs text-alerta">

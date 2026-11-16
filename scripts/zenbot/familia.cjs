@@ -1,6 +1,7 @@
 // Grupo familiar de Google con el navegador del servidor (zenbot-navegador, sesión del administrador del grupo,
 // depuración solo en 127.0.0.1). Abre una pestaña, hace UNA acción y la cierra. Siempre responde un JSON.
 //
+//   node familia.cjs abrir-login     → deja una pestaña en el inicio de sesión de Google (para el visor)
 //   node familia.cjs leer            → {"ok":true,"admin":"…","miembros":[…],"invitaciones":[…]}
 //   node familia.cjs invitar CORREO  → {"ok":true,"invitado":"correo"}
 //   node familia.cjs sacar CORREO    → {"ok":true,"sacado":"correo","era":"miembro"|"invitacion"}
@@ -195,6 +196,13 @@ async function sacar(pagina, correo) {
 
     const pagina = (pestana = await navegador.contexts()[0].newPage());
     try {
+        if (accion === 'abrir-login') {
+            // Para iniciar sesión a mano desde el visor: la pestaña se queda abierta y al frente.
+            await pagina.goto('https://accounts.google.com/ServiceLogin?hl=es&continue=' + encodeURIComponent(BASE + 'family/details?hl=es'), { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await pagina.bringToFront();
+            pestana = null;
+            return await salir({ ok: true, url: pagina.url().split('?')[0] });
+        }
         if (accion === 'leer') {
             const grupo = await leer(pagina);
             return await salir({ ok: true, ...grupo, leido: new Date().toISOString() });

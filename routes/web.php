@@ -8,7 +8,11 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SellerController;
 use App\Http\Controllers\SlotController;
+use App\Http\Controllers\VisorGoogleController;
 use Illuminate\Support\Facades\Route;
+
+// nginx (auth_request) pregunta aquí si deja pasar al visor: sin redirecciones, solo 204 o 403.
+Route::get('/zenbot/autorizar', [VisorGoogleController::class, 'autorizar'])->name('zenbot.autorizar');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'show'])->name('login');
@@ -42,6 +46,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/reportes', ReportController::class)->name('reportes.index');
 
     Route::middleware('admin')->group(function () {
+        Route::get('/google/visor/{account}', [VisorGoogleController::class, 'show'])->name('google.visor');
+        Route::get('/google/visor/{account}/codigo', [VisorGoogleController::class, 'codigo'])->middleware('throttle:60,1')->name('google.visor.codigo');
+        Route::post('/google/visor/{account}/login', [VisorGoogleController::class, 'login'])->middleware('throttle:10,1')->name('google.visor.login');
+        Route::post('/google/visor/{account}/listo', [VisorGoogleController::class, 'listo'])->middleware('throttle:10,1')->name('google.visor.listo');
         Route::get('/vendedores', [SellerController::class, 'index'])->name('vendedores.index');
         Route::post('/vendedores', [SellerController::class, 'store'])->name('vendedores.store');
         Route::put('/vendedores/{seller}', [SellerController::class, 'update'])->name('vendedores.update');
