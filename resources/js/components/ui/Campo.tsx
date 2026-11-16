@@ -95,7 +95,7 @@ export function Campo({ etiqueta, error, ayuda, opcional, ocultarEtiqueta, junto
                     id={campoId}
                     aria-invalid={error ? true : undefined}
                     aria-describedby={idsDescripcion(campoId, error, ayuda)}
-                    className={cn('h-full min-w-0 flex-1 self-stretch bg-transparent py-2 outline-none placeholder:text-tenue/80', TEXTO_CONTROL, className)}
+                    className={cn('h-full min-w-0 flex-1 self-stretch bg-transparent py-2 outline-none placeholder:text-tenue', TEXTO_CONTROL, className)}
                     {...resto}
                 />
                 {sufijo && <span className="-mr-1 flex shrink-0 items-center text-tenue">{sufijo}</span>}
@@ -129,7 +129,7 @@ export function CampoArea({ etiqueta, error, ayuda, opcional, ocultarEtiqueta, j
                 aria-invalid={error ? true : undefined}
                 aria-describedby={idsDescripcion(campoId, error, ayuda)}
                 className={cn(
-                    'w-full resize-y rounded-campo border bg-superficie-2 px-3 py-2.5 text-texto outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-tenue/80',
+                    'w-full resize-y rounded-campo border bg-superficie-2 px-3 py-2.5 text-texto outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-tenue',
                     'focus:border-acento focus:shadow-[0_0_0_3px_rgb(52_216_166/0.18)]',
                     error ? 'border-peligro/70' : 'border-borde-fuerte hover:border-tenue/60',
                     TEXTO_CONTROL,

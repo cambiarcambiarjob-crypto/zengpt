@@ -14,5 +14,6 @@ createInertiaApp({
     setup({ el, App, props }) {
         createRoot(el).render(<App {...props} />);
     },
-    progress: { color: '#8b5cf6' },
+    // Barra de progreso de navegación con el jade de la marca (ver resources/css/app.css).
+    progress: { color: '#34d8a6', showSpinner: false },
 });

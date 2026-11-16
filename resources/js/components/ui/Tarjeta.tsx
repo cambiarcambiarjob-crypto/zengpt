@@ -44,7 +44,8 @@ export function Tarjeta({ titulo, descripcion, acciones, relleno = 'normal', com
     return (
         <Etiqueta
             className={cn(
-                'rounded-tarjeta border border-borde bg-superficie shadow-tarjeta',
+                // min-w-0: dentro de una rejilla, una tabla ancha no ensancha la página (se desplaza dentro de la tarjeta).
+                'min-w-0 rounded-tarjeta border border-borde bg-superficie shadow-tarjeta',
                 interactiva && 'transition-[border-color,background-color] duration-150 hover:border-borde-fuerte hover:bg-superficie-2',
                 RELLENOS[relleno],
                 className,

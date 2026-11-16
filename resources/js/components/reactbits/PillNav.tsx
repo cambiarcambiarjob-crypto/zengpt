@@ -893,7 +893,7 @@ const PillNav = ({
           className={[TOGGLE, joined ? TOGGLE_BARE : SURFACE].join(' ')}
           aria-expanded={open}
           aria-controls={panelId}
-          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
           onClick={toggle}
         >
           <span className={BURGER} aria-hidden="true">

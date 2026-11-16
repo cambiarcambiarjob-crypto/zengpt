@@ -24,5 +24,5 @@ export function Aparecer({ retraso, indice, efecto = 'entrada', como: Etiqueta =
     const estilo: CSSProperties | undefined = espera > 0 ? { animationDelay: `${espera}ms`, ...style } : style;
     const Componente = Etiqueta as 'div';
 
-    return <Componente className={cn(EFECTOS[efecto], className)} style={estilo} {...resto} />;
+    return <Componente className={cn('min-w-0', EFECTOS[efecto], className)} style={estilo} {...resto} />;
 }

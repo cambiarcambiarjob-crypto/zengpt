@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from 'react';
+import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 import SpotlightCard from '@/components/reactbits/SpotlightCard';
 import { cn } from '@/lib/cn';
 import { EncabezadoTarjeta, RELLENOS } from './Tarjeta';
@@ -26,8 +26,8 @@ export function TarjetaFoco({ titulo, descripcion, acciones, relleno = 'normal',
             borderGlow={0.55}
             spotlightSize={280}
             // Las clases con «!» pisan el radio y el relleno que trae el componente original.
-            className={cn('rounded-tarjeta! p-0! shadow-tarjeta', className)}
-            style={{ '--spotlight-card-surface': 'var(--color-superficie)', '--spotlight-card-border': 'var(--color-borde)', '--spotlight-card-shadow': 'var(--shadow-tarjeta)' } as React.CSSProperties}
+            className={cn('min-w-0 rounded-tarjeta! p-0! shadow-tarjeta', className)}
+            style={{ '--spotlight-card-surface': 'var(--color-superficie)', '--spotlight-card-border': 'var(--color-borde)', '--spotlight-card-shadow': 'var(--shadow-tarjeta)' } as CSSProperties}
             {...resto}
         >
             <div className={RELLENOS[relleno]}>

@@ -31,7 +31,8 @@ export interface ModalProps {
 
 /**
  * Ventana modal accesible: foco atrapado, Esc para cerrar, devuelve el foco al cerrar y bloquea el desplazamiento del fondo.
- * En celular se muestra como hoja inferior. El foco inicial va al elemento con `data-autofocus` o, si no hay, al primer campo.
+ * En celular se muestra como hoja inferior. El foco inicial va al elemento con `data-autofocus` o, si no hay, al primer campo
+ * (en pantallas táctiles se queda en la ventana para no abrir el teclado de golpe).
  *
  *   const [abierto, setAbierto] = useState(false);
  *   <Modal abierto={abierto} alCerrar={() => setAbierto(false)} titulo="Nueva cuenta" alEnviar={enviar} bloqueado={form.processing}
@@ -63,9 +64,11 @@ export function Modal({ abierto, alCerrar, titulo, descripcion, children, pie, a
             if (barra > 0) raiz.style.paddingRight = `${barra}px`;
         }
 
+        // En pantallas táctiles el foco se queda en la ventana: enfocar un campo abriría el teclado encima del formulario.
+        const tactil = window.matchMedia('(pointer: coarse)').matches;
         const inicial =
             nodo?.querySelector<HTMLElement>('[data-autofocus]') ??
-            nodo?.querySelector<HTMLElement>('[data-cuerpo] input:not([type="hidden"]):not([disabled]), [data-cuerpo] select:not([disabled]), [data-cuerpo] textarea:not([disabled])') ??
+            (tactil ? null : nodo?.querySelector<HTMLElement>('[data-cuerpo] input:not([type="hidden"]):not([disabled]), [data-cuerpo] select:not([disabled]), [data-cuerpo] textarea:not([disabled])')) ??
             nodo;
         inicial?.focus({ preventScroll: true });
 
