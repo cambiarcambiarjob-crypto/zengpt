@@ -6,7 +6,6 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="theme-color" content="#07070b">
     <title inertia>ZenGPT</title>
-    @routes
     @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
     @inertiaHead
