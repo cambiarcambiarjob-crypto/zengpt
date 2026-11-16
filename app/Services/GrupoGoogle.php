@@ -23,6 +23,32 @@ class GrupoGoogle
         return (bool) $account->google_conectada || in_array(mb_strtolower($account->email), self::cuentas(), true);
     }
 
+    /**
+     * ¿Es una invitación apartada como liga para mandar (al correo de ligas), y no un cliente?
+     * En Gmail ignora puntos y «+algo»: luis.leo+3@gmail.com cuenta igual que luisleo@gmail.com.
+     */
+    public static function esCorreoDeLigas(string $correo): bool
+    {
+        $base = array_filter(array_map(fn (string $c): string => self::gmailBase($c), (array) config('zengpt.google.correos_ligas', [])));
+
+        return $base !== [] && in_array(self::gmailBase($correo), $base, true);
+    }
+
+    private static function gmailBase(string $correo): string
+    {
+        $correo = mb_strtolower(trim($correo));
+        if (! str_contains($correo, '@')) {
+            return '';
+        }
+        [$usuario, $dominio] = explode('@', $correo, 2);
+        if (in_array($dominio, ['gmail.com', 'googlemail.com'], true)) {
+            $usuario = str_replace('.', '', explode('+', $usuario, 2)[0]);
+            $dominio = 'gmail.com';
+        }
+
+        return $usuario.'@'.$dominio;
+    }
+
     /** @return list<string> */
     public static function cuentas(): array
     {
@@ -87,22 +113,34 @@ class GrupoGoogle
      * Marca a cada cliente como miembro / invitado / ausente según Google y da de alta (sin precio ni vendedor,
      * pendientes de pago) a quienes están en Google pero no en el sistema, mientras haya espacio.
      *
-     * @return array{miembros: int, invitados: int, ausentes: int, agregados: int, extra: int}
+     * @return array{miembros: int, invitados: int, ausentes: int, agregados: int, extra: int, ligas: int}
      */
     public function sincronizar(Account $account): array
     {
         $grupo = $this->leer($account);
-        $miembros = collect($grupo['miembros'])->reject(fn (array $m): bool => (bool) ($m['admin'] ?? false))->pluck('email')->map(fn ($e) => mb_strtolower($e))->all();
-        $invitados = collect($grupo['invitaciones'])->pluck('email')->map(fn ($e) => mb_strtolower($e))->all();
-        $resumen = ['miembros' => 0, 'invitados' => 0, 'ausentes' => 0, 'agregados' => 0, 'extra' => 0];
+        $miembros = collect($grupo['miembros'])->reject(fn (array $m): bool => (bool) ($m['admin'] ?? false))->pluck('email')->map(fn ($e) => mb_strtolower($e));
+        $invitados = collect($grupo['invitaciones'])->pluck('email')->map(fn ($e) => mb_strtolower($e));
+        // Las invitaciones al correo de ligas son ligas por mandar, no clientes: no ocupan espacio en el sistema.
+        $ligas = $invitados->filter(fn (string $e): bool => self::esCorreoDeLigas($e))->count();
+        $miembros = $miembros->reject(fn (string $e): bool => self::esCorreoDeLigas($e))->values()->all();
+        $invitados = $invitados->reject(fn (string $e): bool => self::esCorreoDeLigas($e))->values()->all();
+        $resumen = ['miembros' => 0, 'invitados' => 0, 'ausentes' => 0, 'agregados' => 0, 'extra' => 0, 'ligas' => $ligas];
 
-        DB::transaction(function () use ($account, $miembros, $invitados, &$resumen): void {
+        DB::transaction(function () use ($account, $miembros, $invitados, $ligas, &$resumen): void {
             $cuenta = Account::query()->lockForUpdate()->findOrFail($account->id);
             $clientes = [];
 
             foreach ($cuenta->slots()->get() as $slot) {
                 /** @var Slot $slot */
                 $correo = mb_strtolower($slot->client_email);
+
+                // Si una liga se había dado de alta sola como cliente, se quita y su espacio queda libre.
+                if ($slot->origen === 'google' && self::esCorreoDeLigas($correo)) {
+                    $slot->delete();
+
+                    continue;
+                }
+
                 $clientes[] = $correo;
                 $this->marcar($slot, in_array($correo, $miembros, true) ? 'miembro' : (in_array($correo, $invitados, true) ? 'invitado' : 'ausente'));
                 $resumen[match ($slot->google_status) {
@@ -134,7 +172,7 @@ class GrupoGoogle
             }
 
             $resumen['extra'] = count($sinLugar);
-            $cuenta->forceFill(['google_synced_at' => now(), 'google_extra' => $sinLugar, 'google_conectada' => true])->save();
+            $cuenta->forceFill(['google_synced_at' => now(), 'google_extra' => $sinLugar, 'google_conectada' => true, 'google_ligas' => $ligas])->save();
         });
 
         return $resumen;

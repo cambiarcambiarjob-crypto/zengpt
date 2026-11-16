@@ -29,7 +29,7 @@ export interface Cuenta {
     activa: boolean; por_vencer: boolean; notes: string | null;
     capacidad: number; ocupados: number; libres: number; ingresos: number; pendientes_pago: number; espacios: Espacio[];
     /** Sincronización con el grupo familiar de Google (solo cuentas con sesión abierta en el servidor). */
-    google: { conectada: boolean; revisada: string | null; extra: { email: string; tipo: 'miembro' | 'invitado' }[] };
+    google: { conectada: boolean; revisada: string | null; ligas: number; extra: { email: string; tipo: 'miembro' | 'invitado' }[] };
 }
 
 /** Reparto de un periodo: ventas − publicidad − costo de cuentas = neto; socio 10 %; el resto, mitad vendedor y mitad dueño. */

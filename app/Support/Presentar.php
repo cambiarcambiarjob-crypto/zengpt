@@ -36,6 +36,7 @@ final class Presentar
                 'conectada' => GrupoGoogle::conectada($account),
                 'revisada' => $account->google_synced_at?->toIso8601String(),
                 'extra' => $account->google_extra ?? [],
+                'ligas' => (int) $account->google_ligas,
             ],
         ];
     }

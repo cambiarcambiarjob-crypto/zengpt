@@ -118,6 +118,7 @@ class AccountController extends Controller
             $r['invitados'] ? "{$r['invitados']} con invitación pendiente" : null,
             $r['ausentes'] ? "{$r['ausentes']} que no aparecen" : null,
             $r['extra'] ? "{$r['extra']} sin espacio libre en la cuenta" : null,
+            ($r['ligas'] ?? 0) ? "{$r['ligas']} ligas por mandar" : null,
         ]);
 
         return back()->with('success', 'Revisado en Google: '.($partes ? implode(' · ', $partes) : 'el grupo está vacío').'.');

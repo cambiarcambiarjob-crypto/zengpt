@@ -8,6 +8,7 @@ use App\Models\AdSpend;
 use App\Models\Seller;
 use App\Models\Slot;
 use App\Models\User;
+use App\Services\GrupoGoogle;
 use App\Support\Hoy;
 use App\Support\Presentar;
 use Database\Seeders\DatabaseSeeder;
@@ -438,25 +439,27 @@ class SistemaTest extends TestCase
         $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('error', 'Google cerró la sesión del servidor: entra con «Iniciar sesión (visor)» en la cuenta.');
     }
 
-    public function test_el_visor_de_google_es_solo_del_administrador(): void
+    public function test_el_visor_de_google_es_para_los_usuarios_del_sistema(): void
     {
         config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com']]);
         $cuenta = $this->cuenta(['email' => 'admin.grupo@gmail.com', 'password' => 'clave-de-prueba', 'twofa_url' => 'https://api2fa.com/GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ']);
         $otra = $this->cuenta();
 
-        // nginx pregunta a /zenbot/autorizar: sin sesión o socio → 403; administrador → 204.
+        // nginx pregunta a /zenbot/autorizar: sin sesión → 403; administrador o socio → 204.
         $this->get('/zenbot/autorizar')->assertForbidden();
-        $this->actingAs($this->socio)->get('/zenbot/autorizar')->assertForbidden();
+        $this->actingAs($this->socio)->get('/zenbot/autorizar')->assertNoContent();
         $this->actingAs($this->admin)->get('/zenbot/autorizar')->assertNoContent();
 
-        $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertForbidden();
+        $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertOk();
+        auth()->logout();
+        $this->get("/google/visor/{$cuenta->id}")->assertRedirect('/login');
         // Cada cuenta tiene su propio visor, aunque todavía no esté conectada.
         $this->actingAs($this->admin)->get("/google/visor/{$otra->id}")->assertOk()->assertSee($otra->email);
         $this->actingAs($this->admin)->get("/google/visor/{$cuenta->id}")->assertOk()->assertSee('admin.grupo@gmail.com')->assertSee('Pegar en el visor')->assertHeader('Cache-Control', 'no-store, private');
 
         $codigo = $this->actingAs($this->admin)->getJson("/google/visor/{$cuenta->id}/codigo")->assertOk()->json();
         $this->assertMatchesRegularExpression('/^\d{6}$/', $codigo['codigo']);
-        $this->actingAs($this->socio)->getJson("/google/visor/{$cuenta->id}/codigo")->assertForbidden();
+        $this->actingAs($this->socio)->getJson("/google/visor/{$cuenta->id}/codigo")->assertOk();
     }
 
     public function test_al_terminar_en_el_visor_la_cuenta_queda_conectada_y_se_cierra_su_chrome(): void
@@ -481,5 +484,31 @@ class SistemaTest extends TestCase
         Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'sin_sesion']), exitCode: 1)]);
         $this->actingAs($this->admin)->post("/google/visor/{$otra->id}/listo")->assertSessionHas('error');
         $this->assertFalse($otra->fresh()->google_conectada);
+    }
+
+    public function test_las_invitaciones_al_correo_de_ligas_son_ligas_por_mandar_y_no_clientes(): void
+    {
+        config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com'], 'zengpt.google.correos_ligas' => ['ligas.dueno@gmail.com']]);
+        $cuenta = $this->cuenta(['email' => 'admin.grupo@gmail.com']);
+        // Una liga que antes se había dado de alta sola como cliente.
+        Slot::query()->create(['account_id' => $cuenta->id, 'position' => 1, 'client_email' => 'ligasdueno+9@gmail.com', 'price_cents' => 0, 'seller_id' => null, 'sold_on' => Hoy::fecha(), 'paid_on' => null, 'origen' => 'google']);
+
+        Process::fake(['*' => Process::result(json_encode([
+            'ok' => true, 'admin' => 'admin.grupo@gmail.com',
+            'miembros' => [['email' => 'admin.grupo@gmail.com', 'admin' => true], ['email' => 'cliente.real@gmail.com', 'admin' => false]],
+            // Gmail: puntos y «+algo» son el mismo correo.
+            'invitaciones' => [['email' => 'ligas.dueno@gmail.com'], ['email' => 'l.i.g.a.s.dueno+2@gmail.com'], ['email' => 'LigasDueno+3@googlemail.com']],
+        ]))]);
+
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('success');
+
+        $cuenta->refresh();
+        $this->assertSame(3, $cuenta->google_ligas);
+        $this->assertSame(['cliente.real@gmail.com'], $cuenta->slots()->pluck('client_email')->all());
+        $this->assertSame([], $cuenta->google_extra);
+        $this->assertSame(3, Presentar::cuenta($cuenta->load('slots'))['google']['ligas']);
+        // Los espacios de las ligas quedan libres para agregar clientes.
+        $this->assertSame(4, Presentar::cuenta($cuenta)['libres']);
+        $this->assertFalse(GrupoGoogle::esCorreoDeLigas('otro@gmail.com'));
     }
 }

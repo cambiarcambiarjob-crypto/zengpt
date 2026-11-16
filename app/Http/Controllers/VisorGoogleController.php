@@ -13,14 +13,14 @@ use RuntimeException;
 
 /**
  * Visor del Chrome de cada cuenta en el servidor, para iniciar sesión A MANO en Google (la primera vez o cuando la
- * sesión se cierra): la pantalla (noVNC) más los datos de la cuenta para copiarlos o pegarlos directo. Solo el administrador.
+ * sesión se cierra): la pantalla (noVNC) más los datos de la cuenta para copiarlos o pegarlos directo. Administrador y socio.
  */
 class VisorGoogleController extends Controller
 {
-    /** nginx (auth_request) pregunta aquí antes de dejar pasar a /zenbot-visor/: solo el administrador con sesión. */
+    /** nginx (auth_request) pregunta aquí antes de dejar pasar a /zenbot-visor/: cualquier usuario con sesión en ZenGPT. */
     public function autorizar(Request $request): Response
     {
-        return response('', $request->user()?->isAdmin() ? 204 : 403);
+        return response('', $request->user() !== null ? 204 : 403);
     }
 
     public function show(Account $account): Response

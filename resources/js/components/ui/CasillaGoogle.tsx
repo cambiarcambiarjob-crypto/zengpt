@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { cn } from '@/lib/cn';
 
 /** Casilla «Invitar en Google al guardar»: solo en cuentas con su sesión abierta en el servidor. */
-export function CasillaGoogle({ marcada, alCambiar, className }: { marcada: boolean; alCambiar: (valor: boolean) => void; className?: string }) {
+export function CasillaGoogle({ marcada, alCambiar, ayuda, className }: { marcada: boolean; alCambiar: (valor: boolean) => void; ayuda?: string; className?: string }) {
     const id = useId();
 
     return (
@@ -13,7 +13,7 @@ export function CasillaGoogle({ marcada, alCambiar, className }: { marcada: bool
                     Invitar en Google al guardar
                 </label>
                 <p id={`${id}-ayuda`} className="mt-0.5 text-xs text-tenue">
-                    Google le manda al cliente su invitación al grupo familiar desde esta cuenta. Tarda unos segundos.
+                    {ayuda ?? 'Google le manda al cliente su invitación al grupo familiar desde esta cuenta. Tarda unos segundos.'}
                 </p>
             </div>
         </div>

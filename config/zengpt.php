@@ -29,6 +29,9 @@ return [
         'node' => env('ZENBOT_NODE', 'node'),
         'script' => env('ZENBOT_SCRIPT', '/opt/zenbot/familia.cjs'),
         'cuentas' => explode(',', (string) env('ZENBOT_CUENTAS', '')),
+        // Correos a los que se mandan invitaciones solo para sacar ligas y pasárselas a clientes (no son clientes).
+        // Con Gmail cuentan también sus variantes con puntos o «+algo».
+        'correos_ligas' => explode(',', (string) env('ZENBOT_CORREOS_LIGAS', '')),
     ],
 
     /*
