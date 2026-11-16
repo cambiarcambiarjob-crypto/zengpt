@@ -18,7 +18,7 @@ class Account extends Model
 
     protected function casts(): array
     {
-        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array', 'google_extra' => 'array', 'google_synced_at' => 'datetime'];
+        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array', 'google_extra' => 'array', 'google_conectada' => 'boolean', 'google_synced_at' => 'datetime'];
     }
 
     public function setEmailAttribute(string $value): void

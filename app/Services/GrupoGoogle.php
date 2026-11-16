@@ -17,10 +17,10 @@ use RuntimeException;
  */
 class GrupoGoogle
 {
-    /** Cuentas cuya sesión está abierta en el navegador del servidor (ZENBOT_CUENTAS). */
+    /** La cuenta tiene su sesión de Google guardada en su Chrome del servidor (o está en ZENBOT_CUENTAS). */
     public static function conectada(Account $account): bool
     {
-        return in_array(mb_strtolower($account->email), self::cuentas(), true);
+        return (bool) $account->google_conectada || in_array(mb_strtolower($account->email), self::cuentas(), true);
     }
 
     /** @return list<string> */
@@ -42,10 +42,19 @@ class GrupoGoogle
         return ['admin' => $datos['admin'] ?? null, 'miembros' => $datos['miembros'] ?? [], 'invitaciones' => $datos['invitaciones'] ?? []];
     }
 
-    /** Deja el Chrome del servidor en el inicio de sesión de Google, para terminarlo a mano en el visor. */
-    public function abrirLogin(Account $account): void
+    /**
+     * Abre el Chrome de la cuenta para el visor (en su grupo familiar o, si no hay sesión, en el inicio de sesión).
+     * Devuelve si ya tenía la sesión iniciada.
+     */
+    public function abrirVisor(Account $account): bool
     {
-        $this->ejecutar($account, ['abrir-login'], 40);
+        return (bool) ($this->ejecutar($account, ['abrir'], 60, requiereConexion: false)['sesion'] ?? false);
+    }
+
+    /** Cierra el Chrome de la cuenta (fin del visor). */
+    public function cerrarVisor(Account $account): void
+    {
+        $this->ejecutar($account, ['cerrar'], 30, requiereConexion: false);
     }
 
     /** Manda la invitación de Google al cliente y lo marca como invitado. */
@@ -125,7 +134,7 @@ class GrupoGoogle
             }
 
             $resumen['extra'] = count($sinLugar);
-            $cuenta->forceFill(['google_synced_at' => now(), 'google_extra' => $sinLugar])->save();
+            $cuenta->forceFill(['google_synced_at' => now(), 'google_extra' => $sinLugar, 'google_conectada' => true])->save();
         });
 
         return $resumen;
@@ -165,10 +174,10 @@ class GrupoGoogle
      * @param  list<string>  $argumentos
      * @return array<string, mixed>
      */
-    private function ejecutar(Account $account, array $argumentos, int $segundos): array
+    private function ejecutar(Account $account, array $argumentos, int $segundos, bool $requiereConexion = true): array
     {
-        if (! self::conectada($account)) {
-            throw new RuntimeException('Esta cuenta no tiene su sesión abierta en el servidor.');
+        if ($requiereConexion && ! self::conectada($account)) {
+            throw new RuntimeException('Esta cuenta aún no tiene su sesión de Google en el servidor: entra con «Iniciar sesión (visor)».');
         }
 
         $lock = Cache::lock('zenbot-navegador', $segundos + 10);
@@ -197,7 +206,8 @@ class GrupoGoogle
         if (! ($datos['ok'] ?? false)) {
             throw new RuntimeException(code: ($datos['error'] ?? '') === 'no_encontrado' ? self::NO_ENCONTRADO : 0, message: match ($datos['error'] ?? '') {
                 'sin_sesion' => 'Google cerró la sesión del servidor: entra con «Iniciar sesión (visor)» en la cuenta.',
-                'sin_navegador' => 'El navegador del servidor no está encendido.',
+                'sin_navegador' => 'El Chrome del servidor no arrancó. Intenta de nuevo en un momento.',
+                'visor_ocupado' => 'El visor está abierto con otra cuenta: ciérralo (o espera unos minutos) y vuelve a intentar.',
                 'otra_cuenta' => 'La sesión del servidor es de otra cuenta: no se hizo nada.',
                 'no_encontrado' => 'Ese cliente no está en el grupo de Google (ni con invitación pendiente).',
                 'sin_lugar' => 'El grupo de Google ya no tiene lugares para invitar.',

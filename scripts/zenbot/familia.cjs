@@ -1,15 +1,28 @@
-// Grupo familiar de Google con el navegador del servidor (zenbot-navegador, sesión del administrador del grupo,
-// depuración solo en 127.0.0.1). Abre una pestaña, hace UNA acción y la cierra. Siempre responde un JSON.
+// Grupo familiar de Google con el Chrome del servidor. CADA cuenta tiene su propio perfil de Chrome (su propia
+// sesión de Google) en ZENBOT_PERFILES/<correo>. El Chrome de una cuenta se abre en la pantalla virtual solo
+// mientras trabaja (o mientras el visor está abierto) y se cierra al terminar; nunca hay dos abiertos a la vez.
+// ZENBOT_ADMIN dice de qué cuenta se trata. Hace UNA acción y siempre responde un JSON.
 //
-//   node familia.cjs abrir-login     → deja una pestaña en el inicio de sesión de Google (para el visor)
+//   node familia.cjs abrir           → abre el Chrome de la cuenta para el visor (se queda abierto)
+//   node familia.cjs cerrar          → cierra el Chrome de la cuenta (fin del visor)
 //   node familia.cjs leer            → {"ok":true,"admin":"…","miembros":[…],"invitaciones":[…]}
 //   node familia.cjs invitar CORREO  → {"ok":true,"invitado":"correo"}
 //   node familia.cjs sacar CORREO    → {"ok":true,"sacado":"correo","era":"miembro"|"invitacion"}
-//   errores                          → {"ok":false,"error":"sin_sesion"|"sin_navegador"|"otra_cuenta"|"no_encontrado"|"sin_lugar"|"no_confirmado"|"…"}
+//   errores                          → {"ok":false,"error":"sin_sesion"|"sin_navegador"|"visor_ocupado"|"otra_cuenta"|"no_encontrado"|"sin_lugar"|"no_confirmado"|"…"}
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
 const { chromium } = require('playwright');
 
-const CDP = process.env.ZENBOT_CDP || 'http://127.0.0.1:9333';
+const CHROME = process.env.ZENBOT_CHROME || '/opt/zenbot/navegadores/chromium-1148/chrome-linux/chrome';
+const PERFILES = process.env.ZENBOT_PERFILES || '/var/lib/zenbot/perfiles';
+const CASA = process.env.ZENBOT_HOME || '/var/lib/zenbot/home';
+const PANTALLA = process.env.ZENBOT_DISPLAY || ':99';
+const PUERTO = Number(process.env.ZENBOT_PUERTO || 9333);
+const ESTADO = path.join(PERFILES, '.estado.json');
+// Un visor olvidado deja de apartar el Chrome después de este tiempo.
+const VISOR_MINUTOS = 20;
 const BASE = 'https://myaccount.google.com/';
 const CORREO = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 // ZENBOT_ADMIN: correo esperado del administrador; si la sesión es de otra cuenta, no se hace nada.
@@ -73,9 +86,67 @@ async function verificarIdentidad(pagina) {
     if (pagina.url().startsWith('https://accounts.google.com/')) throw falla('verificacion_atorada');
 }
 
+// ——— Un Chrome por cuenta ———————————————————————————————————————————————————————————————
+
+const perfilDe = (correo) => path.join(PERFILES, correo.replace(/[^a-z0-9@._-]/g, '_'));
+const vivo = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const leerEstado = () => { try { return JSON.parse(fs.readFileSync(ESTADO, 'utf8')); } catch { return null; } };
+const guardarEstado = (e) => (e ? fs.writeFileSync(ESTADO, JSON.stringify(e)) : fs.rmSync(ESTADO, { force: true }));
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Cierra el Chrome abierto (deja que guarde la sesión: SIGTERM y, si no responde, SIGKILL). */
+async function cerrarChrome(estado) {
+    if (estado && vivo(estado.pid)) {
+        try { process.kill(-estado.pid, 'SIGTERM'); } catch { try { process.kill(estado.pid, 'SIGTERM'); } catch {} }
+        for (let i = 0; i < 40 && vivo(estado.pid); i++) await dormir(200);
+        if (vivo(estado.pid)) { try { process.kill(-estado.pid, 'SIGKILL'); } catch { try { process.kill(estado.pid, 'SIGKILL'); } catch {} } }
+    }
+    guardarEstado(null);
+}
+
+/**
+ * Deja abierto el Chrome de `correo` y se conecta a él. Si está abierto el de otra cuenta, lo cierra antes (salvo que
+ * su visor esté en uso). Con `visor`, el Chrome queda apartado para la pantalla del visor.
+ */
+async function chromeDe(correo, visor = false) {
+    let estado = leerEstado();
+    if (estado && !vivo(estado.pid)) { guardarEstado(null); estado = null; }
+
+    if (estado && estado.correo !== correo) {
+        if (estado.visor && Date.now() - estado.desde < VISOR_MINUTOS * 60000) throw falla('visor_ocupado');
+        await cerrarChrome(estado);
+        estado = null;
+    }
+
+    if (!estado) {
+        const perfil = perfilDe(correo);
+        fs.mkdirSync(perfil, { recursive: true });
+        fs.mkdirSync(CASA, { recursive: true });
+        const hijo = spawn(CHROME, [
+            `--user-data-dir=${perfil}`, '--no-first-run', '--no-default-browser-check', '--lang=es-MX',
+            '--window-position=0,0', '--window-size=1366,860',
+            '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${PUERTO}`, 'about:blank',
+        ], { detached: true, stdio: 'ignore', env: { ...process.env, DISPLAY: PANTALLA, HOME: CASA, ZENBOT_PASS: '', ZENBOT_TOTP: '' } });
+        hijo.unref();
+        estado = { correo, pid: hijo.pid, visor: false, desde: Date.now() };
+    }
+
+    if (visor) { estado.visor = true; estado.desde = Date.now(); }
+    guardarEstado(estado);
+
+    for (let i = 0; i < 50; i++) {
+        try { return { navegador: await chromium.connectOverCDP(`http://127.0.0.1:${PUERTO}`, { timeout: 3000 }), estado }; } catch { await dormir(300); }
+    }
+    throw falla('sin_navegador');
+}
+
 let pestana = null;
+let conexion = null;
+let alSalir = null;
 const salir = async (dato, codigo = 0) => {
     if (pestana) await pestana.close().catch(() => {});
+    if (conexion) await conexion.close().catch(() => {});
+    if (alSalir) await alSalir().catch(() => {});
     process.stdout.write(JSON.stringify(dato));
     process.exit(codigo);
 };
@@ -187,21 +258,36 @@ async function sacar(pagina, correo) {
 }
 
 (async () => {
-    let navegador;
-    try {
-        navegador = await chromium.connectOverCDP(CDP, { timeout: 10000 });
-    } catch {
-        return salir({ ok: false, error: 'sin_navegador' }, 1);
+    if (!CORREO.test(ESPERADO)) return salir({ ok: false, error: 'sin_cuenta' }, 2);
+
+    if (accion === 'cerrar') {
+        const estado = leerEstado();
+        if (estado && estado.correo === ESPERADO) await cerrarChrome(estado);
+        return salir({ ok: true });
     }
 
-    const pagina = (pestana = await navegador.contexts()[0].newPage());
+    let navegador;
+    let estado;
     try {
-        if (accion === 'abrir-login') {
-            // Para iniciar sesión a mano desde el visor: la pestaña se queda abierta y al frente.
-            await pagina.goto('https://accounts.google.com/ServiceLogin?hl=es&continue=' + encodeURIComponent(BASE + 'family/details?hl=es'), { waitUntil: 'domcontentloaded', timeout: 30000 });
+        ({ navegador, estado } = await chromeDe(ESPERADO, accion === 'abrir'));
+    } catch (e) {
+        return salir({ ok: false, error: e.codigo || 'sin_navegador' }, 1);
+    }
+    conexion = navegador;
+    // Si nadie tiene abierto el visor de esta cuenta, el Chrome se cierra al terminar.
+    if (!estado.visor) alSalir = () => cerrarChrome(leerEstado());
+
+    const contexto = navegador.contexts()[0];
+    const pagina = (pestana = await contexto.newPage());
+    try {
+        if (accion === 'abrir') {
+            // Visor: deja una sola pestaña al frente, en el grupo familiar (Google manda a iniciar sesión si hace falta).
+            for (const otra of contexto.pages()) if (otra !== pagina) await otra.close().catch(() => {});
+            await pagina.goto(BASE + 'family/details?hl=es', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
             await pagina.bringToFront();
             pestana = null;
-            return await salir({ ok: true, url: pagina.url().split('?')[0] });
+            const dentro = pagina.url().startsWith(BASE);
+            return await salir({ ok: true, sesion: dentro });
         }
         if (accion === 'leer') {
             const grupo = await leer(pagina);

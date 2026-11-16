@@ -23,7 +23,25 @@ function cuando(iso: string): string {
 export function GoogleCuenta({ cuenta }: { cuenta: Cuenta }) {
     const [revisando, setRevisando] = useState(false);
     const { auth } = usePagina();
-    if (!cuenta.google.conectada) return null;
+    const esAdmin = Boolean(auth.user?.is_admin);
+
+    // Sin sesión de Google en el servidor todavía: solo el administrador puede conectarla por el visor.
+    if (!cuenta.google.conectada) {
+        return esAdmin ? (
+            <div className="mt-2.5">
+                <a
+                    href={`/google/visor/${cuenta.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-borde-fuerte bg-superficie-2 px-2.5 text-xs font-medium text-texto transition-colors hover:border-acento/50 hover:text-acento"
+                    title="Abre el Chrome de esta cuenta en el servidor para iniciar sesión en Google una vez. Después el sistema revisa, invita y saca solo."
+                >
+                    <LogIn className="size-3.5" aria-hidden="true" />
+                    Conectar con Google (visor)
+                </a>
+            </div>
+        ) : null;
+    }
 
     const revisar = () => {
         setRevisando(true);
@@ -44,7 +62,7 @@ export function GoogleCuenta({ cuenta }: { cuenta: Cuenta }) {
                     {revisando ? 'Revisando en Google…' : 'Revisar grupo en Google'}
                 </button>
                 <span className="text-xs text-tenue">{cuenta.google.revisada ? `Revisado ${cuando(cuenta.google.revisada)}` : 'Aún no se ha revisado'}</span>
-                {auth.user?.is_admin && (
+                {esAdmin && (
                     <a
                         href={`/google/visor/${cuenta.id}`}
                         target="_blank"

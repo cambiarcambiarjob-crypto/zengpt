@@ -56,15 +56,18 @@
         </div>
         <span id="estado" class="estado"><span class="punto"></span><span id="estado-texto">Conectando…</span></span>
         <span class="espacio"></span>
-        <button type="button" id="ir-login">Abrir inicio de sesión de Google</button>
-        <a href="/cuentas" style="font-size:13px">Volver a Cuentas</a>
+        <button type="button" id="ir-login">Recargar el Chrome de esta cuenta</button>
+        <form method="POST" action="/google/visor/{{ $cuenta->id }}/cerrar" style="margin:0">
+            @csrf
+            <button type="submit">Cerrar visor</button>
+        </form>
     </header>
 
     <main>
         <div id="pantalla" aria-label="Pantalla del Chrome del servidor"></div>
 
         <aside>
-            <p class="paso"><b>1.</b> Pica «Abrir inicio de sesión de Google» si la pantalla no lo muestra.</p>
+            <p class="paso"><b>1.</b> La pantalla es el Chrome de <b>esta cuenta</b> (cada cuenta tiene el suyo). Si Google pide iniciar sesión, sigue los pasos.</p>
             <p class="paso"><b>2.</b> Da clic en el campo de la pantalla y pica <b>Pegar en el visor</b>: lo escribe por ti.</p>
 
             <div class="dato">
@@ -131,7 +134,7 @@
         const rfb = new RFB(document.getElementById('pantalla'), `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/zenbot-visor/websockify`);
         rfb.scaleViewport = true;
         rfb.focusOnClick = true;
-        rfb.addEventListener('connect', () => estado('Conectado', 'ok'));
+        rfb.addEventListener('connect', () => {});
         rfb.addEventListener('disconnect', () => estado('Desconectado: recarga la página', 'mal'));
 
         // Pegar en el visor: teclea el dato, letra por letra, en el campo que tenga el foco en la pantalla.
@@ -189,15 +192,26 @@
             }, 1000);
         }
 
-        document.getElementById('ir-login').addEventListener('click', async (e) => {
-            e.target.disabled = true;
+        // Abre el Chrome de ESTA cuenta en la pantalla (al entrar y con el botón de recargar).
+        const boton = document.getElementById('ir-login');
+        const abrirChrome = async () => {
+            boton.disabled = true;
+            estado('Abriendo el Chrome de esta cuenta…');
             try {
                 const r = await fetch(location.pathname + '/login', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' } });
                 const j = await r.json();
-                avisar(j.ok ? 'Listo: la pantalla muestra el inicio de sesión de Google.' : j.mensaje, j.ok);
-            } catch { avisar('No se pudo abrir el inicio de sesión.', false); }
-            e.target.disabled = false;
-        });
+                if (j.ok) {
+                    estado(j.sesion ? 'Sesión de Google iniciada' : 'Inicia sesión en la pantalla', 'ok');
+                    avisar(j.sesion ? 'Esta cuenta ya tiene su sesión: pica «Ya inicié sesión» para revisar el grupo.' : 'Google pide iniciar sesión: usa los datos de la derecha.');
+                } else {
+                    estado('No se pudo abrir', 'mal');
+                    avisar(j.mensaje, false);
+                }
+            } catch { estado('No se pudo abrir', 'mal'); avisar('No se pudo abrir el Chrome de la cuenta.', false); }
+            boton.disabled = false;
+        };
+        boton.addEventListener('click', abrirChrome);
+        abrirChrome();
     </script>
 </body>
 </html>

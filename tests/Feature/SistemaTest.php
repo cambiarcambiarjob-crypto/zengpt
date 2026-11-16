@@ -450,11 +450,36 @@ class SistemaTest extends TestCase
         $this->actingAs($this->admin)->get('/zenbot/autorizar')->assertNoContent();
 
         $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertForbidden();
-        $this->actingAs($this->admin)->get("/google/visor/{$otra->id}")->assertNotFound();
+        // Cada cuenta tiene su propio visor, aunque todavía no esté conectada.
+        $this->actingAs($this->admin)->get("/google/visor/{$otra->id}")->assertOk()->assertSee($otra->email);
         $this->actingAs($this->admin)->get("/google/visor/{$cuenta->id}")->assertOk()->assertSee('admin.grupo@gmail.com')->assertSee('Pegar en el visor')->assertHeader('Cache-Control', 'no-store, private');
 
         $codigo = $this->actingAs($this->admin)->getJson("/google/visor/{$cuenta->id}/codigo")->assertOk()->json();
         $this->assertMatchesRegularExpression('/^\d{6}$/', $codigo['codigo']);
         $this->actingAs($this->socio)->getJson("/google/visor/{$cuenta->id}/codigo")->assertForbidden();
+    }
+
+    public function test_al_terminar_en_el_visor_la_cuenta_queda_conectada_y_se_cierra_su_chrome(): void
+    {
+        $cuenta = $this->cuenta(['email' => 'nueva.cuenta@gmail.com']);
+        $this->assertFalse(Presentar::cuenta($cuenta->load('slots'))['google']['conectada']);
+
+        // Abrir el visor arranca el Chrome de ESA cuenta (ZENBOT_ADMIN = su correo).
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'sesion' => false]))]);
+        $this->actingAs($this->admin)->postJson("/google/visor/{$cuenta->id}/login")->assertOk()->assertJson(['ok' => true, 'sesion' => false]);
+        Process::assertRan(fn ($p) => in_array('abrir', (array) $p->command, true) && ($p->environment['ZENBOT_ADMIN'] ?? null) === 'nueva.cuenta@gmail.com');
+
+        // «Ya inicié sesión»: revisa el grupo, marca la cuenta conectada y cierra su Chrome.
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'admin' => 'nueva.cuenta@gmail.com', 'miembros' => [['email' => 'nueva.cuenta@gmail.com', 'admin' => true]], 'invitaciones' => []]))]);
+        $this->actingAs($this->admin)->post("/google/visor/{$cuenta->id}/listo")->assertRedirect('/cuentas');
+        Process::assertRan(fn ($p) => in_array('leer', (array) $p->command, true));
+        Process::assertRan(fn ($p) => in_array('cerrar', (array) $p->command, true));
+        $this->assertTrue($cuenta->fresh()->google_conectada);
+
+        // Si Google no dejó la sesión, no queda conectada.
+        $otra = $this->cuenta(['email' => 'otra.cuenta@gmail.com']);
+        Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'sin_sesion']), exitCode: 1)]);
+        $this->actingAs($this->admin)->post("/google/visor/{$otra->id}/listo")->assertSessionHas('error');
+        $this->assertFalse($otra->fresh()->google_conectada);
     }
 }
