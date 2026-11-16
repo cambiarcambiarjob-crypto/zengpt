@@ -29,7 +29,8 @@ const OPCION =
 export function SelectorPrecio({ valor, alCambiar, precios = [200, 400, 500], etiqueta = 'Precio', error, ayuda, deshabilitado = false, className }: SelectorPrecioProps) {
     const id = useId();
     const entrada = useRef<HTMLInputElement>(null);
-    const esSugerido = valor !== '' && precios.includes(Number(valor));
+    const esReposicion = valor !== '' && Number(valor) === 0;
+    const esSugerido = esReposicion || (valor !== '' && precios.includes(Number(valor)));
     const [otro, setOtro] = useState(valor !== '' && !esSugerido);
     const enfocarOtro = useRef(false);
 
@@ -47,7 +48,7 @@ export function SelectorPrecio({ valor, alCambiar, precios = [200, 400, 500], et
 
     return (
         <EnvolturaCampo id={`${id}-otro`} etiqueta={etiqueta} error={error} ayuda={ayuda} className={className}>
-            <div role="radiogroup" aria-label={typeof etiqueta === 'string' ? etiqueta : 'Precio'} className="grid grid-cols-4 gap-2">
+            <div role="radiogroup" aria-label={typeof etiqueta === 'string' ? etiqueta : 'Precio'} className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {precios.map((precio) => (
                     <label key={precio} className="relative">
                         <input
@@ -64,6 +65,22 @@ export function SelectorPrecio({ valor, alCambiar, precios = [200, 400, 500], et
                         <span className={cn(OPCION, 'cifras')}>${precio}</span>
                     </label>
                 ))}
+                <label className="relative">
+                    <input
+                        type="radio"
+                        name={`${id}-precio`}
+                        className="peer sr-only"
+                        checked={!otro && esReposicion}
+                        disabled={deshabilitado}
+                        onChange={() => {
+                            setOtro(false);
+                            alCambiar('0');
+                        }}
+                    />
+                    <span className={OPCION} title="Cuenta como cliente, pero con $0: no suma a las ventas">
+                        Reposición
+                    </span>
+                </label>
                 <label className="relative">
                     <input
                         type="radio"
