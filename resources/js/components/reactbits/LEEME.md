@@ -40,6 +40,7 @@ curl -s https://reactbits.dev/r/<Nombre>-TS-TW.json   # → files[].content y de
 | `Magnet` | ninguna | No | El contenido «sigue» un poco al cursor (botón principal de un estado vacío). | — |
 | `CountUp` | `motion` | No | Conteo animado de números. Úsalo con `<Cifra>`. | `ui/Cifra` |
 | `BlurText` | `motion` | No | Texto que entra desenfocado palabra por palabra (saludo o titular de una pantalla). | — (recomendado: saludo del panel) |
+| `GlareHover` | ninguna | No | Destello que barre una tarjeta al pasar el cursor o al entrar en pantalla (una tarjeta destacada por pantalla). | Tarjeta de identidad del Perfil |
 
 Único cambio respecto al registro: las etiquetas accesibles del menú plegado de `PillNav` están en español («Abrir menú» / «Cerrar menú»).
 

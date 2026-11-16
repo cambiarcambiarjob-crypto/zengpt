@@ -30,7 +30,7 @@ function Dato({ icono, etiqueta, valor, detalle }: { icono: ReactNode; etiqueta:
 }
 
 const SIN_DATO = (
-    <span className="text-tenue">
+    <span className="relative text-tenue">
         <span aria-hidden="true">—</span>
         <span className="sr-only">Sin dato</span>
     </span>

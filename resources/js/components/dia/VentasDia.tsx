@@ -5,6 +5,7 @@ import { Boton, EnlaceBoton } from '@/components/ui/Boton';
 import { EstadoVacio } from '@/components/ui/EstadoVacio';
 import { Tabla, type Columna } from '@/components/ui/Tabla';
 import { Tarjeta } from '@/components/ui/Tarjeta';
+import { cn } from '@/lib/cn';
 import { dinero, plural } from '@/lib/formato';
 import type { Espacio } from '@/types';
 
@@ -71,14 +72,14 @@ export function VentasDia({ ventas, esHoy, hayEspacio, accionPrincipal, alAgrega
 
     return (
         <Tarjeta
-            className={className}
+            className={cn('flex flex-col', className)}
             relleno="ninguno"
             titulo={esHoy ? 'Ventas de hoy' : 'Ventas del día'}
             descripcion={ventas.length > 0 ? `${plural(ventas.length, 'cliente')} · ${dinero(total)}` : 'Clientes capturados con esta fecha'}
             acciones={ventas.length > 0 ? botonAgregar : undefined}
         >
             {ventas.length === 0 ? (
-                <div className="border-t border-borde">
+                <div className="flex flex-1 items-center justify-center border-t border-borde">
                     <EstadoVacio
                         compacto
                         icono={<Receipt className="size-5" />}

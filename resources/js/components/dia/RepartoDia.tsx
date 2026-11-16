@@ -75,6 +75,9 @@ const sinMovimiento = (fila: FilaVendedor) => fila.ventas_count === 0 && fila.pu
 /** Columnas intermedias con menos relleno: la tabla completa cabe sin desplazarse en tableta y laptop. */
 const APRETADA = 'max-xl:px-2.5!';
 
+/** Deja que el rótulo largo de una columna se parta en dos renglones en pantallas angostas (los montos no se parten). */
+const ENCABEZADO_EN_DOS = 'max-xl:whitespace-normal! max-xl:min-w-20';
+
 /**
  * Reparto del día por vendedor: ventas, publicidad, neto y a quién le toca cada parte, con fila de totales y la regla
  * en una línea plegable. Tabla de 768 px en adelante; en celular, una tarjeta por vendedor con los mismos datos.
@@ -91,9 +94,9 @@ export function RepartoDia({ filas, totales, nombreDueno, porcentajeSocio, porce
         { clave: 'ventas', titulo: 'Ventas', numerica: true, celda: (fila) => <Vendido totales={fila} />, pie: <Vendido totales={totales} />, clase: APRETADA },
         { clave: 'publicidad', titulo: 'Publicidad', numerica: true, celda: (fila) => dinero(fila.publicidad === 0 ? 0 : -fila.publicidad), pie: dinero(totales.publicidad === 0 ? 0 : -totales.publicidad), clase: APRETADA },
         { clave: 'neto', titulo: 'Neto', numerica: true, celda: (fila) => <Monto centavos={fila.neto} />, pie: <Monto centavos={totales.neto} />, clase: cn('font-medium', APRETADA) },
-        { clave: 'socio', titulo: tituloSocio, numerica: true, celda: (fila) => <Monto centavos={fila.socio} resaltar={!esAdmin} />, pie: <Monto centavos={totales.socio} resaltar={!esAdmin} />, clase: APRETADA },
-        { clave: 'parte-vendedor', titulo: 'Para el vendedor', numerica: true, celda: (fila) => <ParteVendedor fila={fila} />, pie: <Monto centavos={totales.vendedor} />, clase: APRETADA },
-        { clave: 'dueno', titulo: tituloDueno, numerica: true, celda: (fila) => <Monto centavos={fila.dueno} resaltar={esAdmin} />, pie: <Monto centavos={totales.dueno} resaltar={esAdmin} /> },
+        { clave: 'socio', titulo: tituloSocio, numerica: true, celda: (fila) => <Monto centavos={fila.socio} resaltar={!esAdmin} />, pie: <Monto centavos={totales.socio} resaltar={!esAdmin} />, clase: cn(ENCABEZADO_EN_DOS, APRETADA) },
+        { clave: 'parte-vendedor', titulo: 'Para el vendedor', numerica: true, celda: (fila) => <ParteVendedor fila={fila} />, pie: <Monto centavos={totales.vendedor} />, clase: cn(ENCABEZADO_EN_DOS, APRETADA) },
+        { clave: 'dueno', titulo: tituloDueno, numerica: true, celda: (fila) => <Monto centavos={fila.dueno} resaltar={esAdmin} />, pie: <Monto centavos={totales.dueno} resaltar={esAdmin} />, clase: ENCABEZADO_EN_DOS },
     ];
 
     const tarjeta = (clave: string | number, encabezado: ReactNode, datos: Pick<Totales, 'ventas' | 'ventas_count' | 'publicidad' | 'neto'>, partes: ReactNode, total = false) => (
@@ -121,9 +124,9 @@ export function RepartoDia({ filas, totales, nombreDueno, porcentajeSocio, porce
 
     return (
         <Tarjeta className={className} relleno="ninguno" titulo="Reparto por vendedor" descripcion="Qué le toca a cada quien por las ventas de este día">
-            {filas.length === 0 ? (
+            {!conMovimiento ? (
                 <div className="border-t border-borde">
-                    <EstadoVacio compacto icono={<Scale className="size-5" />} titulo="Sin vendedores con movimiento" descripcion="Cuando haya una venta o un gasto de publicidad con esta fecha, aquí aparece el reparto." />
+                    <EstadoVacio compacto icono={<Scale className="size-5" />} titulo="Nada que repartir este día" descripcion="Cuando haya una venta o un gasto de publicidad con esta fecha, aquí aparece qué le toca a cada quien." />
                 </div>
             ) : (
                 <>
@@ -134,7 +137,7 @@ export function RepartoDia({ filas, totales, nombreDueno, porcentajeSocio, porce
                         filas={filas}
                         clave={(fila) => fila.seller_id}
                         columnas={columnas}
-                        claseFila={(fila) => (conMovimiento && sinMovimiento(fila) ? '[&>td]:text-tenue' : undefined)}
+                        claseFila={(fila) => (sinMovimiento(fila) ? '[&>td]:text-tenue' : undefined)}
                     />
 
                     {/* Celular: los mismos datos, una tarjeta por vendedor. */}

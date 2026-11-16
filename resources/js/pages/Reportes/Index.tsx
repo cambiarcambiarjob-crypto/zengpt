@@ -16,13 +16,21 @@ import { EstadoVacio } from '@/components/ui/EstadoVacio';
 import { Tarjeta } from '@/components/ui/Tarjeta';
 import AppLayout from '@/layouts/AppLayout';
 import { cn } from '@/lib/cn';
-import { fechaLarga, fechaMedia, plural } from '@/lib/formato';
+import { aFecha, fechaLarga, fechaMedia, plural } from '@/lib/formato';
 import { usePagina } from '@/lib/pagina';
 import type { ReportesProps } from '@/types';
 
-/** «Lunes 16 de noviembre de 2026» para un día; «1 de noviembre de 2026 – 16 de noviembre de 2026» para un rango. */
+/** «Lunes 16 de noviembre de 2026» para un día; «1 – 16 de noviembre de 2026» o «28 de octubre – 16 de noviembre de 2026» para un rango. */
 function periodoEnPalabras(desde: string, hasta: string): string {
-    return desde === hasta ? capitalizar(fechaLarga(desde, { anio: true })) : `${fechaMedia(desde)} – ${fechaMedia(hasta)}`;
+    if (desde === hasta) return capitalizar(fechaLarga(desde, { anio: true }));
+
+    const [inicio, fin] = [aFecha(desde), aFecha(hasta)];
+    if (inicio.getFullYear() !== fin.getFullYear()) return `${fechaMedia(desde)} – ${fechaMedia(hasta)}`;
+
+    // fechaMedia = «16 de noviembre de 2026»: del inicio solo hace falta lo que cambia (el día, o el día y el mes).
+    const partes = fechaMedia(desde).split(' de ');
+
+    return `${inicio.getMonth() === fin.getMonth() ? partes[0] : `${partes[0]} de ${partes[1]}`} – ${fechaMedia(hasta)}`;
 }
 
 /**
@@ -108,15 +116,14 @@ export default function ReportesIndex() {
                     </Aparecer>
                 ) : (
                     <>
-                        <Aparecer indice={1} className="xl:col-span-8">
-                            <RankingVendedores className="h-full" filas={filas} totales={totales} dueno={capitalizar(dueno)} porcentajeSocio={negocio.porcentaje_socio} porcentajeVendedor={negocio.porcentaje_vendedor} />
+                        <Aparecer indice={1} className="xl:col-span-12">
+                            <RankingVendedores filas={filas} totales={totales} dueno={capitalizar(dueno)} porcentajeSocio={negocio.porcentaje_socio} porcentajeVendedor={negocio.porcentaje_vendedor} />
                         </Aparecer>
-                        <Aparecer indice={2} className="xl:col-span-4">
+                        <Aparecer indice={2} className="xl:col-span-8">
+                            <GraficaDias className="h-full" serie={serie} desde={desde} hoy={negocio.hoy} />
+                        </Aparecer>
+                        <Aparecer indice={3} className="xl:col-span-4">
                             <DatosPeriodo className="h-full" totales={totales} serie={serie} dias={dias} />
-                        </Aparecer>
-
-                        <Aparecer indice={3} className="xl:col-span-12">
-                            <GraficaDias serie={serie} desde={desde} hoy={negocio.hoy} />
                         </Aparecer>
 
                         <Aparecer indice={4} className="xl:col-span-12">

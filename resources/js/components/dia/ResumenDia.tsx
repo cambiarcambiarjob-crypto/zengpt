@@ -114,7 +114,7 @@ export function ResumenDia({ totales, esHoy, nombreDueno, porcentajeSocio, esAdm
                 <dl className="mt-auto pt-4">
                     <Parte parte="socio" nombre={`Socio · ${porciento(porcentajeSocio)}`} detalle={`${porciento(porcentajeSocio)} del neto de cada vendedor`} centavos={totales.socio} mio={!esAdmin} />
                     <Parte parte="vendedor" nombre="Vendedores" detalle="Su parte de lo que vendieron" centavos={totales.vendedor} />
-                    <Parte parte="dueno" nombre={nombreDueno} detalle="Su parte y todo lo que vendió" centavos={totales.dueno} mio={esAdmin} />
+                    <Parte parte="dueno" nombre={nombreDueno} detalle="Su parte y sus propias ventas" centavos={totales.dueno} mio={esAdmin} />
                 </dl>
             </TarjetaFoco>
         </div>

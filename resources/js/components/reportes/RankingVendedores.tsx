@@ -21,7 +21,7 @@ export interface RankingVendedoresProps {
     className?: string;
 }
 
-const REJILLA = 'md:grid md:grid-cols-[minmax(0,11.5rem)_minmax(0,1fr)_5.25rem_5.25rem_5.75rem] md:items-center md:gap-x-5';
+const REJILLA = 'md:grid md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_5.5rem_5.5rem_6rem] md:items-center md:gap-x-6';
 
 /** Barra fina que se desliza desde la izquierda hasta su porcentaje (solo `transform`: no mueve nada alrededor). */
 function Barra({ porcentaje, color, listo, retraso, gruesa = false }: { porcentaje: number; color: string; listo: boolean; retraso: number; gruesa?: boolean }) {
@@ -98,13 +98,11 @@ export function RankingVendedores({ filas, totales, dueno, porcentajeSocio, porc
                                                         Líder
                                                     </Insignia>
                                                 )}
-                                                {fila.is_owner && (
-                                                    <Insignia estado="neutral" tamano="sm" sinPunto>
-                                                        Dueño
-                                                    </Insignia>
-                                                )}
                                             </p>
-                                            <p className="cifras mt-0.5 text-xs text-tenue">{fila.ventas_count === 0 ? 'Sin ventas' : plural(fila.ventas_count, 'venta')}</p>
+                                            <p className="cifras mt-0.5 truncate text-xs text-tenue">
+                                                {fila.ventas_count === 0 ? 'Sin ventas' : plural(fila.ventas_count, 'venta')}
+                                                {fila.is_owner && ' · dueño'}
+                                            </p>
                                         </div>
                                     </div>
 
@@ -114,7 +112,7 @@ export function RankingVendedores({ filas, totales, dueno, porcentajeSocio, porc
                                                 <span className="sr-only">Vendido: </span>
                                                 {dinero(fila.ventas)}
                                             </span>
-                                            <span className="cifras text-xs text-tenue">{totales.ventas > 0 ? `${porciento(proporcion(fila.ventas, totales.ventas))} del total` : ''}</span>
+                                            <span className="cifras text-xs whitespace-nowrap text-tenue">{totales.ventas > 0 ? `${porciento(proporcion(fila.ventas, totales.ventas))} del total` : ''}</span>
                                         </p>
                                         <span className="mt-2 flex flex-col gap-1" aria-hidden="true">
                                             <Barra gruesa porcentaje={(fila.ventas / tope) * 100} color={COLOR_SERIE.ventas} listo={listo} retraso={indice * 60} />

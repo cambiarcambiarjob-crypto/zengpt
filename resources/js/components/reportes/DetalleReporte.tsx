@@ -80,7 +80,8 @@ export function DetalleReporte({ desde, hasta, filas, totales, serie, hoy, dueno
             clase: ENCABEZADO_EN_DOS,
             celda: (fila) =>
                 fila.is_owner ? (
-                    <span className="text-tenue">
+                    // «relative»: el texto para lectores de pantalla queda dentro del marco desplazable de la tabla (si no, ensancha la página en celular).
+                    <span className="relative text-tenue">
                         <span aria-hidden="true">—</span>
                         <span className="sr-only">No aplica: es el dueño</span>
                     </span>
