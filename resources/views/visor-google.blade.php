@@ -65,7 +65,7 @@
 
         <aside>
             <p class="paso"><b>1.</b> Pica «Abrir inicio de sesión de Google» si la pantalla no lo muestra.</p>
-            <p class="paso"><b>2.</b> Da clic en el campo de la pantalla y usa <b>Pegar en el visor</b> (o <b>Copiar</b> y Ctrl+V).</p>
+            <p class="paso"><b>2.</b> Da clic en el campo de la pantalla y pica <b>Pegar en el visor</b>: lo escribe por ti.</p>
 
             <div class="dato">
                 <label>Correo</label>
@@ -134,18 +134,22 @@
         rfb.addEventListener('connect', () => estado('Conectado', 'ok'));
         rfb.addEventListener('disconnect', () => estado('Desconectado: recarga la página', 'mal'));
 
-        // Pegar en el visor: pone el texto en el portapapeles del servidor y manda Ctrl+V al campo que tenga el foco.
-        const pegar = (clave) => {
+        // Pegar en el visor: teclea el dato, letra por letra, en el campo que tenga el foco en la pantalla.
+        const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+        let tecleando = false;
+        const pegar = async (clave) => {
             const texto = datos[clave];
             if (!texto) return avisar('No hay dato para pegar.', false);
-            rfb.clipboardPasteFrom(texto);
-            setTimeout(() => {
-                rfb.sendKey(0xffe3, 'ControlLeft', true);
-                rfb.sendKey(0x0076, 'KeyV');
-                rfb.sendKey(0xffe3, 'ControlLeft', false);
-                rfb.focus();
-            }, 200);
-            avisar('Pegado en el campo seleccionado de la pantalla.');
+            if (tecleando) return;
+            tecleando = true;
+            rfb.focus();
+            for (const letra of texto) {
+                const cp = letra.codePointAt(0);
+                rfb.sendKey(cp < 0x100 ? cp : 0x01000000 + cp);
+                await esperar(25);
+            }
+            tecleando = false;
+            avisar('Listo: se escribió en el campo seleccionado de la pantalla.');
         };
         const copiar = async (clave) => {
             const texto = datos[clave];
