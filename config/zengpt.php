@@ -27,12 +27,12 @@ return [
         'asunto' => 'Tu invitación a Google One Pro por 12 meses',
         'boton' => 'Adquiere Google One Pro por 12 meses',
         'beneficios' => [
-            ['icono' => '☁️', 'titulo' => '2 TB de almacenamiento', 'texto' => 'Gmail, Drive y Fotos sin preocuparte por el espacio.'],
-            ['icono' => '✨', 'titulo' => 'Gemini Pro', 'texto' => 'La IA más avanzada de Google para escribir, crear e investigar.'],
-            ['icono' => '📧', 'titulo' => 'IA en Gmail y Docs', 'texto' => 'Resume correos, redacta y organiza en segundos.'],
-            ['icono' => '🔎', 'titulo' => 'Investigación profunda', 'texto' => 'Informes completos y NotebookLM con más capacidad.'],
-            ['icono' => '🎬', 'titulo' => 'Creación con IA', 'texto' => 'Edición avanzada en Fotos y videos generados con IA.'],
-            ['icono' => '🔒', 'titulo' => '100 % privado', 'texto' => 'Usas tu propio Gmail: nadie ve tus archivos.'],
+            ['titulo' => 'Gemini 4 Argon', 'texto' => 'El modelo más potente de Google para ideas, creación, análisis y respuestas.'],
+            ['titulo' => '5 TB en Drive y Gmail', 'texto' => 'Espacio de sobra para tus archivos, fotos y correos.'],
+            ['titulo' => 'Imágenes ilimitadas', 'texto' => 'Genera y edita imágenes con IA sin límite.'],
+            ['titulo' => 'Generación de videos', 'texto' => 'Crea videos a partir de una idea o una foto.'],
+            ['titulo' => 'Análisis inteligente de datos', 'texto' => 'Sube hojas de cálculo y documentos y obtén respuestas al instante.'],
+            ['titulo' => 'Tu propio espacio', 'texto' => 'Entras con tu Gmail: nadie ve tus archivos ni tus conversaciones.'],
         ],
     ],
 ];

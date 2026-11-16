@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:1200px;height:480px;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:#040616}
+.wrap{position:relative;width:1200px;height:480px;background:
+ radial-gradient(ellipse 520px 380px at 210px 240px, rgba(80,120,255,.55), transparent 70%),
+ radial-gradient(ellipse 600px 420px at 1080px 120px, rgba(150,70,255,.45), transparent 70%),
+ radial-gradient(ellipse 700px 300px at 700px 520px, rgba(40,90,255,.35), transparent 70%),
+ linear-gradient(120deg,#060a2a 0%,#0a1650 45%,#1b0f55 100%);}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(90deg,transparent,black 30%,black 70%,transparent)}
+.num{position:absolute;right:40px;top:-40px;font-size:520px;font-weight:800;line-height:1;color:transparent;-webkit-text-stroke:2px rgba(160,140,255,.35);letter-spacing:-20px}
+svg{position:absolute;left:70px;top:70px;filter:drop-shadow(0 0 40px rgba(110,150,255,.9)) drop-shadow(0 0 90px rgba(160,100,255,.6))}
+.txt{position:absolute;left:430px;top:110px;width:640px}
+.eyebrow{font-size:20px;font-weight:700;letter-spacing:6px;color:#9fb4ff;text-transform:uppercase}
+h1{margin-top:14px;font-size:84px;line-height:1;font-weight:800;letter-spacing:-2px;color:#fff}
+h1 span{background:linear-gradient(90deg,#8ab4ff,#c084fc);-webkit-background-clip:text;color:transparent}
+p{margin-top:20px;font-size:28px;line-height:1.35;color:#d7deff}
+.chips{margin-top:30px;display:flex;gap:14px}
+.chip{padding:12px 20px;border:1px solid rgba(160,180,255,.45);background:rgba(20,30,90,.55);color:#e6ebff;font-size:20px;font-weight:600;border-radius:4px}
+.dot{display:inline-block;width:8px;height:8px;background:#8ab4ff;margin-right:10px;vertical-align:middle}
+.small{position:absolute;width:10px;height:10px;background:#cfd9ff;transform:rotate(45deg);box-shadow:0 0 18px #9fb4ff}
+</style></head><body><div class="wrap"><div class="grid"></div><div class="num">4</div>
+<svg width="320" height="340" viewBox="0 0 100 100"><defs>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e8f0ff"/><stop offset=".45" stop-color="#7aa2ff"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs>
+<path d="M50 2 C53 32 68 47 98 50 C68 53 53 68 50 98 C47 68 32 53 2 50 C32 47 47 32 50 2 Z" fill="url(#g)"/></svg>
+<div class="small" style="left:360px;top:90px"></div><div class="small" style="left:395px;top:360px;width:6px;height:6px"></div>
+<div class="txt"><div class="eyebrow">Ya está aquí</div><h1>Gemini <span>4 Argon</span></h1>
+<p>La IA más potente para ideas, creación,<br>análisis y respuestas.</p>
+<div class="chips"><div class="chip"><span class="dot"></span>Más inteligente</div><div class="chip"><span class="dot"></span>Más creativa</div><div class="chip"><span class="dot"></span>Más útil</div></div></div>
+</div></body></html>
