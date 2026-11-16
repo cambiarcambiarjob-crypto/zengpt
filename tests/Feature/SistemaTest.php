@@ -390,7 +390,37 @@ class SistemaTest extends TestCase
         $this->assertSame('ausente', $estado['fuera@gmail.com']);
         $this->assertSame('aceptada', Slot::query()->where('client_email', 'dentro@gmail.com')->first()->inviteStatus());
         $this->assertNull(Slot::query()->where('client_email', 'fuera@gmail.com')->first()->invite_accepted_at);
-        $this->assertSame([['email' => 'colado@gmail.com', 'tipo' => 'miembro']], $cuenta->fresh()->google_extra);
+        // Quien está en Google pero no en el sistema se da de alta solo: sin precio ni vendedor y pendiente de pago.
+        $colado = Slot::query()->where('client_email', 'colado@gmail.com')->firstOrFail();
+        $this->assertSame([$cuenta->id, 4, 0, null, null, 'google', 'miembro'], [$colado->account_id, $colado->position, $colado->price_cents, $colado->seller_id, $colado->paid_on, $colado->origen, $colado->google_status]);
+        $this->assertSame([], $cuenta->fresh()->google_extra);
+
+        // No se puede marcar pagado sin vendedor; al editarlo, precio y vendedor no son obligatorios.
+        $this->actingAs($this->socio)->put("/espacios/{$colado->id}/pago", ['pagado' => true])->assertSessionHas('error');
+        $this->assertNull($colado->fresh()->paid_on);
+        $this->actingAs($this->socio)->put("/espacios/{$colado->id}", ['client_email' => 'colado@gmail.com', 'price' => '', 'seller_id' => '', 'sold_on' => Hoy::fecha(), 'pendiente' => true])->assertSessionHasNoErrors();
+        $this->actingAs($this->socio)->put("/espacios/{$colado->id}", ['client_email' => 'colado@gmail.com', 'price' => 400, 'seller_id' => $jorge->id, 'sold_on' => Hoy::fecha(), 'pendiente' => true])->assertSessionHasNoErrors();
+        $this->actingAs($this->socio)->put("/espacios/{$colado->id}/pago", ['pagado' => true])->assertSessionHas('success');
+        $this->assertSame(40000, $colado->fresh()->price_cents);
+        // Un cliente capturado a mano sí exige precio y vendedor.
+        $fuera = Slot::query()->where('client_email', 'fuera@gmail.com')->first();
+        $this->actingAs($this->socio)->put("/espacios/{$fuera->id}", ['client_email' => 'fuera@gmail.com', 'price' => '', 'seller_id' => '', 'sold_on' => Hoy::fecha()])->assertSessionHasErrors(['price', 'seller_id']);
+
+        // Invitar y sacar desde el sistema (con la sesión de esa cuenta).
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'invitado' => 'fuera@gmail.com']))]);
+        $this->actingAs($this->socio)->post("/espacios/{$fuera->id}/google")->assertSessionHas('success');
+        Process::assertRan(fn ($proceso) => array_slice((array) $proceso->command, -2) === ['invitar', 'fuera@gmail.com']);
+        $this->assertSame('invitado', $fuera->fresh()->google_status);
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'sacado' => 'fuera@gmail.com', 'era' => 'invitacion']))]);
+        $this->actingAs($this->socio)->delete("/espacios/{$fuera->id}/google")->assertSessionHas('success');
+        Process::assertRan(fn ($proceso) => array_slice((array) $proceso->command, -2) === ['sacar', 'fuera@gmail.com']);
+        $this->assertSame('ausente', $fuera->fresh()->google_status);
+        $this->assertNotNull($fuera->fresh()); // sigue en el sistema
+
+        // Alta con «invitar en Google al guardar».
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'invitado' => 'nuevo@gmail.com']))]);
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", ['client_email' => 'nuevo@gmail.com', 'price' => 200, 'seller_id' => $jorge->id, 'sold_on' => Hoy::fecha(), 'invitar_google' => true])->assertSessionHas('success');
+        $this->assertSame('invitado', Slot::query()->where('client_email', 'nuevo@gmail.com')->first()->google_status);
 
         // Cuenta sin sesión en el servidor, o sesión de otra cuenta: no toca nada.
         $this->actingAs($this->socio)->post("/cuentas/{$otra->id}/google")->assertSessionHas('error');

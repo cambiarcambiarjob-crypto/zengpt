@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Mail\InvitacionGrupo;
 use App\Models\Account;
 use App\Models\Slot;
+use App\Services\GrupoGoogle;
 use App\Support\Hoy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
+use RuntimeException;
 
 class SlotController extends Controller
 {
@@ -23,12 +25,12 @@ class SlotController extends Controller
         }
 
         // Transacción con bloqueo: dos personas capturando a la vez no pueden pasar de 5 espacios.
-        $creado = DB::transaction(function () use ($account, $data, $request): bool {
+        $creado = DB::transaction(function () use ($account, $data, $request): ?Slot {
             $cuenta = Account::query()->lockForUpdate()->findOrFail($account->id);
             $posicion = $cuenta->firstFreePosition();
 
             if ($posicion === null) {
-                return false;
+                return null;
             }
 
             $invitacion = $this->invitacionInicial($request);
@@ -38,19 +40,29 @@ class SlotController extends Controller
 
             $pendiente = $data['pendiente'];
             unset($data['pendiente']);
-            $cuenta->slots()->create($data + $invitacion + ['position' => $posicion, 'paid_on' => $pendiente ? null : $data['sold_on'], 'created_by' => $request->user()->id]);
 
-            return true;
+            return $cuenta->slots()->create($data + $invitacion + ['position' => $posicion, 'paid_on' => $pendiente ? null : $data['sold_on'], 'created_by' => $request->user()->id]);
         });
 
-        return $creado
+        // «Invitar en Google al guardar» (cuentas con sesión abierta en el servidor).
+        if ($creado !== null && $request->boolean('invitar_google') && GrupoGoogle::conectada($account)) {
+            try {
+                app(GrupoGoogle::class)->invitar($creado);
+
+                return back()->with('success', "Cliente agregado e invitado en Google: {$creado->client_email}.");
+            } catch (RuntimeException $e) {
+                return back()->with('error', "Cliente agregado, pero no se pudo invitar en Google: {$e->getMessage()}");
+            }
+        }
+
+        return $creado !== null
             ? back()->with('success', 'Cliente agregado al espacio.')
             : back()->with('error', 'La cuenta ya tiene sus '.Account::capacity().' espacios ocupados.');
     }
 
     public function update(Request $request, Slot $slot): RedirectResponse
     {
-        $data = $this->validated($request);
+        $data = $this->validated($request, $slot);
         $pendiente = $data['pendiente'];
         unset($data['pendiente']);
         // Pendiente → sin fecha de pago; pagado → conserva la fecha en que pagó (o la de la venta si no tenía).
@@ -133,9 +145,37 @@ class SlotController extends Controller
             'fecha' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.Hoy::carbon()->addDay()->toDateString()],
         ], [], ['fecha' => 'fecha de pago']);
 
+        if ($data['pagado'] && $slot->seller_id === null) {
+            return back()->with('error', "Antes de marcarlo pagado, edita a {$slot->client_email} y ponle precio y vendedor.");
+        }
+
         $slot->update(['paid_on' => $data['pagado'] ? ($data['fecha'] ?? Hoy::fecha()) : null]);
 
         return back()->with('success', $data['pagado'] ? "Pago registrado: {$slot->client_email}." : "{$slot->client_email} quedó pendiente de pago.");
+    }
+
+    /** Manda la invitación de Google al cliente desde la sesión de la cuenta en el servidor. */
+    public function googleInvitar(Slot $slot, GrupoGoogle $grupo): RedirectResponse
+    {
+        try {
+            $grupo->invitar($slot);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Invitación de Google enviada a {$slot->client_email}.");
+    }
+
+    /** Saca al cliente del grupo de Google (o cancela su invitación). Su espacio en el sistema no se toca. */
+    public function googleSacar(Slot $slot, GrupoGoogle $grupo): RedirectResponse
+    {
+        try {
+            $grupo->sacar($slot);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "{$slot->client_email} ya no está en el grupo de Google.");
     }
 
     public function destroy(Slot $slot): RedirectResponse
@@ -172,13 +212,15 @@ class SlotController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function validated(Request $request): array
+    private function validated(Request $request, ?Slot $slot = null): array
     {
+        // Los que llegaron solos desde Google pueden quedarse sin precio ni vendedor hasta que se sepa.
+        $opcional = $slot?->origen === 'google';
         $data = $request->validate([
             'client_email' => ['required', 'email:rfc', 'max:255'],
             'client_phone' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+()\-\s]{7,30}$/'],
-            'price' => ['required', 'numeric', 'min:0', 'max:100000'],
-            'seller_id' => ['required', 'integer', Rule::exists('sellers', 'id')->where('active', true)],
+            'price' => [$opcional ? 'nullable' : 'required', 'numeric', 'min:0', 'max:100000'],
+            'seller_id' => [$opcional ? 'nullable' : 'required', 'integer', Rule::exists('sellers', 'id')->where('active', true)],
             'pendiente' => ['nullable', 'boolean'],
             'sold_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.Hoy::carbon()->addDay()->toDateString()],
         ], ['client_phone.regex' => 'El teléfono solo puede llevar números, espacios, + y guiones.'], [
@@ -188,8 +230,8 @@ class SlotController extends Controller
         return [
             'client_email' => $data['client_email'],
             'client_phone' => filled($data['client_phone'] ?? null) ? trim($data['client_phone']) : null,
-            'price_cents' => (int) round(((float) $data['price']) * 100),
-            'seller_id' => (int) $data['seller_id'],
+            'price_cents' => (int) round(((float) ($data['price'] ?? 0)) * 100),
+            'seller_id' => filled($data['seller_id'] ?? null) ? (int) $data['seller_id'] : null,
             'sold_on' => $data['sold_on'],
             'pendiente' => (bool) ($data['pendiente'] ?? false),
         ];

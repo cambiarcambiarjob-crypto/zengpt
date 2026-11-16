@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Slot extends Model
 {
-    protected $fillable = ['account_id', 'position', 'client_email', 'client_phone', 'price_cents', 'cost_cents', 'seller_id', 'sold_on', 'paid_on', 'created_by', 'invite_url', 'invite_expires_on', 'invite_sent_at', 'invite_accepted_at'];
+    protected $fillable = ['account_id', 'position', 'client_email', 'client_phone', 'price_cents', 'cost_cents', 'seller_id', 'sold_on', 'paid_on', 'created_by', 'invite_url', 'invite_expires_on', 'invite_sent_at', 'invite_accepted_at', 'origen'];
 
     protected function casts(): array
     {

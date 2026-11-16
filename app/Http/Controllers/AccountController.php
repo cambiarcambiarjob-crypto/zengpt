@@ -113,10 +113,11 @@ class AccountController extends Controller
         }
 
         $partes = array_filter([
+            $r['agregados'] ? "{$r['agregados']} agregados al sistema" : null,
             $r['miembros'] ? "{$r['miembros']} en el grupo" : null,
             $r['invitados'] ? "{$r['invitados']} con invitación pendiente" : null,
             $r['ausentes'] ? "{$r['ausentes']} que no aparecen" : null,
-            $r['extra'] ? "{$r['extra']} en Google que no están en el sistema" : null,
+            $r['extra'] ? "{$r['extra']} sin espacio libre en la cuenta" : null,
         ]);
 
         return back()->with('success', 'Revisado en Google: '.($partes ? implode(' · ', $partes) : 'el grupo está vacío').'.');

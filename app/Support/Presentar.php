@@ -59,6 +59,7 @@ final class Presentar
             'invite_expires_on' => $slot->invite_expires_on?->toDateString(),
             'invite_status' => $slot->inviteStatus(),
             'google_status' => $slot->google_status,
+            'origen' => $slot->origen,
         ];
     }
 }

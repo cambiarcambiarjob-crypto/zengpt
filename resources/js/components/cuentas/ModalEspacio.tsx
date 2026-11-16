@@ -3,6 +3,7 @@ import { UserMinus } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { Boton } from '@/components/ui/Boton';
 import { Campo } from '@/components/ui/Campo';
+import { CasillaGoogle } from '@/components/ui/CasillaGoogle';
 import { CasillaPendiente } from '@/components/ui/CasillaPendiente';
 import { Modal } from '@/components/ui/Modal';
 import { Selector, type OpcionSelector } from '@/components/ui/Selector';
@@ -33,22 +34,26 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
     const { negocio } = usePagina();
     const editando = espacio !== null;
 
+    // Llegó solo desde Google: precio y vendedor se completan después (no son obligatorios).
+    const deGoogle = espacio?.origen === 'google';
+    const sinPrecio = deGoogle && espacio?.price_cents === 0 && espacio?.seller_id === null;
     const form = useForm(() => {
         const recordado = leerUltimoVendedor();
 
         return {
             client_email: espacio?.client_email ?? '',
             client_phone: espacio?.client_phone ?? '',
-            price: espacio ? pesos(espacio.price_cents) || '0' : '',
-            seller_id: espacio ? String(espacio.seller_id) : vendedores.some((vendedor) => String(vendedor.id) === recordado) ? recordado : vendedores.length === 1 ? String(vendedores[0].id) : '',
+            price: espacio ? (sinPrecio ? '' : pesos(espacio.price_cents) || '0') : '',
+            seller_id: espacio ? (espacio.seller_id ? String(espacio.seller_id) : '') : vendedores.some((vendedor) => String(vendedor.id) === recordado) ? recordado : vendedores.length === 1 ? String(vendedores[0].id) : '',
             sold_on: espacio?.sold_on ?? negocio.hoy,
             pendiente: espacio ? !espacio.paid_on : false,
+            invitar_google: !espacio && cuenta.google.conectada,
         };
     });
 
     const opciones: OpcionSelector[] = vendedores.map((vendedor) => ({ valor: vendedor.id, etiqueta: vendedor.name }));
     // Si el vendedor original ya no está activo, se muestra igual: el servidor pedirá elegir uno activo al guardar.
-    if (espacio && !vendedores.some((vendedor) => vendedor.id === espacio.seller_id)) {
+    if (espacio && espacio.seller_id !== null && !vendedores.some((vendedor) => vendedor.id === espacio.seller_id)) {
         opciones.push({ valor: espacio.seller_id, etiqueta: `${espacio.seller_name ?? 'Vendedor'} (inactivo)` });
     }
 
@@ -166,6 +171,10 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                 />
 
                 <CasillaPendiente marcada={form.data.pendiente} alCambiar={(valor) => form.setData('pendiente', valor)} className="sm:col-span-5" />
+                {!editando && cuenta.google.conectada && <CasillaGoogle marcada={form.data.invitar_google} alCambiar={(valor) => form.setData('invitar_google', valor)} className="sm:col-span-5" />}
+                {deGoogle && (
+                    <p className="text-[13px] text-suave sm:col-span-5">Llegó desde el grupo de Google: precio y vendedor son opcionales. Ponlos cuando pague para que cuente en las ventas.</p>
+                )}
             </div>
         </Modal>
     );

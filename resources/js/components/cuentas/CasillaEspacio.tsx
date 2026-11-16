@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn';
 import { dinero, fechaRelativa } from '@/lib/formato';
 import type { Cuenta, Espacio } from '@/types';
 import { Copiable } from './Copiable';
+import { GoogleEspacio } from './GoogleEspacio';
 import { InvitacionEspacio } from './InvitacionEspacio';
 
 // Las casillas viven en la rejilla de TarjetaCuenta (un contenedor `@container`): angosta = 2 columnas (la ocupada usa las 2),
@@ -24,6 +25,9 @@ export interface CasillaOcupadaProps {
 
 /** Espacio con cliente: precio, Gmail y teléfono copiables, vendedor y fecha de venta. */
 export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, hoy, resaltada = false, alEditar, alLiberar }: CasillaOcupadaProps) {
+    // Llegó solo desde Google y aún no tiene precio ni vendedor: se completa al editarlo.
+    const sinPrecio = espacio.origen === 'google' && espacio.seller_id === null && espacio.price_cents === 0;
+
     return (
         <li
             className={cn(
@@ -37,15 +41,19 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
                         <span className="sr-only">Espacio </span>
                         {espacio.position}
                     </span>
-                    <span className="cifras truncate text-[15px] leading-none font-semibold text-texto">{dinero(espacio.price_cents)}</span>
-                    {!espacio.paid_on && (
+                    {sinPrecio ? (
+                        <span className="shrink-0 text-[13px] leading-none font-medium whitespace-nowrap text-tenue">Sin precio</span>
+                    ) : (
+                        <span className="cifras truncate text-[15px] leading-none font-semibold text-texto">{dinero(espacio.price_cents)}</span>
+                    )}
+                    {!espacio.paid_on && !sinPrecio && (
                         <span className="shrink-0 rounded-[4px] bg-alerta/12 px-1.5 py-0.5 text-[10px] leading-none font-semibold tracking-wide text-alerta uppercase" title="Aún no paga: no cuenta en ventas ni ganancias">
                             Por cobrar
                         </span>
                     )}
                 </p>
                 <div className="-my-1 -mr-1.5 flex shrink-0 items-center">
-                    {!espacio.paid_on && (
+                    {!espacio.paid_on && !sinPrecio && (
                         <button
                             type="button"
                             className={cn(BOTON_ICONO, 'text-alerta! hover:bg-exito/12! hover:text-exito!')}
@@ -87,6 +95,7 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
                         No está en Google
                     </span>
                 )}
+                <GoogleEspacio cuenta={cuenta} espacio={espacio} />
             </div>
 
             {/* Angosta (celular): teléfono y venta en un mismo renglón. Con más ancho, uno bajo el otro y la venta al pie. */}

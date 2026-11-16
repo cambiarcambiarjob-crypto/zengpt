@@ -4,14 +4,16 @@ namespace App\Services;
 
 use App\Models\Account;
 use App\Models\Slot;
+use App\Support\Hoy;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
 /**
- * Lee (SOLO LECTURA) el grupo familiar de Google de una cuenta a través del navegador del servidor que
- * tiene abierta la sesión del administrador del grupo (scripts/zenbot/familia.cjs) y actualiza a sus clientes.
+ * Grupo familiar de Google de una cuenta, a través del navegador del servidor que tiene abierta la sesión del
+ * administrador del grupo (scripts/zenbot/familia.cjs): leerlo, invitar a un cliente y sacarlo.
+ * Una sola acción a la vez (candado) y siempre comprobando que la sesión sea de esa cuenta.
  */
 class GrupoGoogle
 {
@@ -28,93 +30,145 @@ class GrupoGoogle
     }
 
     /**
-     * @return array{admin: ?string, miembros: list<array{email: string, nombre: string, admin: bool}>, invitaciones: list<array{email: string, caduca: ?string}>}
+     * @return array{admin: ?string, miembros: list<array{email: string, admin: bool}>, invitaciones: list<array{email: string, caduca: ?string}>}
      */
-    public function leer(): array
+    public function leer(Account $account): array
     {
-        $resultado = Process::timeout(50)->run([(string) config('zengpt.google.node', 'node'), (string) config('zengpt.google.script'), 'leer']);
-        $datos = json_decode(trim($resultado->output()), true);
+        $datos = $this->ejecutar($account, ['leer'], 50);
+        if (mb_strtolower((string) ($datos['admin'] ?? '')) !== mb_strtolower($account->email)) {
+            throw new RuntimeException('La sesión del servidor es de otra cuenta: no se hizo nada.');
+        }
 
+        return ['admin' => $datos['admin'] ?? null, 'miembros' => $datos['miembros'] ?? [], 'invitaciones' => $datos['invitaciones'] ?? []];
+    }
+
+    /** Manda la invitación de Google al cliente y lo marca como invitado. */
+    public function invitar(Slot $slot): void
+    {
+        $this->ejecutar($slot->account, ['invitar', $slot->client_email], 80);
+        $slot->forceFill(['google_status' => 'invitado', 'invite_sent_at' => $slot->invite_sent_at ?? now(), 'invite_accepted_at' => null])->save();
+    }
+
+    /** Saca al cliente del grupo (o cancela su invitación pendiente). Sigue en el sistema: liberar su espacio es aparte. */
+    public function sacar(Slot $slot): void
+    {
+        $this->ejecutar($slot->account, ['sacar', $slot->client_email], 80);
+        $slot->forceFill(['google_status' => 'ausente', 'invite_accepted_at' => null, 'invite_sent_at' => null])->save();
+    }
+
+    /**
+     * Marca a cada cliente como miembro / invitado / ausente según Google y da de alta (sin precio ni vendedor,
+     * pendientes de pago) a quienes están en Google pero no en el sistema, mientras haya espacio.
+     *
+     * @return array{miembros: int, invitados: int, ausentes: int, agregados: int, extra: int}
+     */
+    public function sincronizar(Account $account): array
+    {
+        $grupo = $this->leer($account);
+        $miembros = collect($grupo['miembros'])->reject(fn (array $m): bool => (bool) ($m['admin'] ?? false))->pluck('email')->map(fn ($e) => mb_strtolower($e))->all();
+        $invitados = collect($grupo['invitaciones'])->pluck('email')->map(fn ($e) => mb_strtolower($e))->all();
+        $resumen = ['miembros' => 0, 'invitados' => 0, 'ausentes' => 0, 'agregados' => 0, 'extra' => 0];
+
+        DB::transaction(function () use ($account, $miembros, $invitados, &$resumen): void {
+            $cuenta = Account::query()->lockForUpdate()->findOrFail($account->id);
+            $clientes = [];
+
+            foreach ($cuenta->slots()->get() as $slot) {
+                /** @var Slot $slot */
+                $correo = mb_strtolower($slot->client_email);
+                $clientes[] = $correo;
+                $this->marcar($slot, in_array($correo, $miembros, true) ? 'miembro' : (in_array($correo, $invitados, true) ? 'invitado' : 'ausente'));
+                $resumen[match ($slot->google_status) {
+                    'miembro' => 'miembros', 'invitado' => 'invitados', default => 'ausentes'
+                }]++;
+            }
+
+            $nuevos = collect($miembros)->map(fn (string $e): array => ['email' => $e, 'tipo' => 'miembro'])
+                ->merge(collect($invitados)->map(fn (string $e): array => ['email' => $e, 'tipo' => 'invitado']))
+                ->reject(fn (array $x): bool => in_array($x['email'], $clientes, true))->values();
+
+            $sinLugar = [];
+            foreach ($nuevos as $nuevo) {
+                $posicion = $cuenta->firstFreePosition();
+                if ($posicion === null || ! $cuenta->isActive()) {
+                    $sinLugar[] = $nuevo;
+
+                    continue;
+                }
+
+                $slot = $cuenta->slots()->create([
+                    'position' => $posicion, 'client_email' => $nuevo['email'], 'price_cents' => 0, 'seller_id' => null,
+                    'sold_on' => Hoy::fecha(), 'paid_on' => null, 'origen' => 'google',
+                ]);
+                $this->marcar($slot, $nuevo['tipo']);
+                $cuenta->unsetRelation('slots');
+                $resumen['agregados']++;
+                $resumen[$nuevo['tipo'] === 'miembro' ? 'miembros' : 'invitados']++;
+            }
+
+            $resumen['extra'] = count($sinLugar);
+            $cuenta->forceFill(['google_synced_at' => now(), 'google_extra' => $sinLugar])->save();
+        });
+
+        return $resumen;
+    }
+
+    private function marcar(Slot $slot, string $estado): void
+    {
+        $slot->google_status = $estado;
+        if ($estado === 'miembro') {
+            $slot->invite_accepted_at ??= now();
+        } else {
+            $slot->invite_accepted_at = null;
+            if ($estado === 'invitado') {
+                $slot->invite_sent_at ??= now();
+            }
+        }
+        $slot->save();
+    }
+
+    /**
+     * Corre una acción del lector con candado (el navegador es uno solo) y traduce los errores.
+     *
+     * @param  list<string>  $argumentos
+     * @return array<string, mixed>
+     */
+    private function ejecutar(Account $account, array $argumentos, int $segundos): array
+    {
+        if (! self::conectada($account)) {
+            throw new RuntimeException('Esta cuenta no tiene su sesión abierta en el servidor.');
+        }
+
+        $lock = Cache::lock('zenbot-navegador', $segundos + 10);
+        if (! $lock->block(15)) {
+            throw new RuntimeException('El servidor está ocupado con otra cuenta; intenta en unos segundos.');
+        }
+
+        try {
+            $resultado = Process::timeout($segundos)
+                ->env(['ZENBOT_ADMIN' => mb_strtolower($account->email)])
+                ->run([(string) config('zengpt.google.node', 'node'), (string) config('zengpt.google.script'), ...$argumentos]);
+        } finally {
+            $lock->release();
+        }
+
+        $datos = json_decode(trim($resultado->output()), true);
         if (! is_array($datos)) {
-            throw new RuntimeException('No se pudo leer el grupo familiar (el lector no respondió).');
+            throw new RuntimeException('No se pudo hablar con Google (el lector no respondió).');
         }
 
         if (! ($datos['ok'] ?? false)) {
             throw new RuntimeException(match ($datos['error'] ?? '') {
                 'sin_sesion' => 'Google cerró la sesión del servidor: hay que volver a iniciar sesión en la cuenta.',
                 'sin_navegador' => 'El navegador del servidor no está encendido.',
+                'otra_cuenta' => 'La sesión del servidor es de otra cuenta: no se hizo nada.',
+                'no_encontrado' => 'Ese cliente no está en el grupo de Google (ni con invitación pendiente).',
+                'sin_lugar' => 'El grupo de Google ya no tiene lugares para invitar.',
+                'no_confirmado' => 'Google no confirmó el cambio. Revisa el grupo y vuelve a intentar.',
                 default => 'Google no respondió como se esperaba. Intenta de nuevo en un momento.',
             });
         }
 
-        return ['admin' => $datos['admin'] ?? null, 'miembros' => $datos['miembros'] ?? [], 'invitaciones' => $datos['invitaciones'] ?? []];
-    }
-
-    /**
-     * Marca a cada cliente como miembro / invitado / ausente según Google y guarda quién está en Google sin estar en
-     * el sistema. Devuelve el resumen para el aviso.
-     *
-     * @return array{miembros: int, invitados: int, ausentes: int, extra: int}
-     */
-    public function sincronizar(Account $account): array
-    {
-        if (! self::conectada($account)) {
-            throw new RuntimeException('Esta cuenta no tiene su sesión abierta en el servidor.');
-        }
-
-        $lock = Cache::lock('zenbot-navegador', 60);
-        if (! $lock->get()) {
-            throw new RuntimeException('Ya se está revisando otra cuenta; intenta en unos segundos.');
-        }
-
-        try {
-            $grupo = $this->leer();
-        } finally {
-            $lock->release();
-        }
-
-        if (mb_strtolower((string) $grupo['admin']) !== mb_strtolower($account->email)) {
-            throw new RuntimeException('La sesión del servidor es de otra cuenta ('.($grupo['admin'] ?? 'desconocida').').');
-        }
-
-        $miembros = collect($grupo['miembros'])->reject(fn (array $m): bool => (bool) ($m['admin'] ?? false))->pluck('email')->map(fn ($e) => mb_strtolower($e))->all();
-        $invitados = collect($grupo['invitaciones'])->pluck('email')->map(fn ($e) => mb_strtolower($e))->all();
-        $resumen = ['miembros' => 0, 'invitados' => 0, 'ausentes' => 0, 'extra' => 0];
-
-        DB::transaction(function () use ($account, $miembros, $invitados, &$resumen): void {
-            $clientes = [];
-
-            foreach ($account->slots()->get() as $slot) {
-                /** @var Slot $slot */
-                $correo = mb_strtolower($slot->client_email);
-                $clientes[] = $correo;
-
-                if (in_array($correo, $miembros, true)) {
-                    $slot->google_status = 'miembro';
-                    $slot->invite_accepted_at ??= now();
-                    $resumen['miembros']++;
-                } elseif (in_array($correo, $invitados, true)) {
-                    $slot->google_status = 'invitado';
-                    $slot->invite_sent_at ??= now();
-                    $slot->invite_accepted_at = null;
-                    $resumen['invitados']++;
-                } else {
-                    $slot->google_status = 'ausente';
-                    $slot->invite_accepted_at = null;
-                    $resumen['ausentes']++;
-                }
-
-                $slot->save();
-            }
-
-            $extra = collect($miembros)->map(fn (string $e): array => ['email' => $e, 'tipo' => 'miembro'])
-                ->merge(collect($invitados)->map(fn (string $e): array => ['email' => $e, 'tipo' => 'invitado']))
-                ->reject(fn (array $x): bool => in_array($x['email'], $clientes, true))->values()->all();
-            $resumen['extra'] = count($extra);
-
-            $account->forceFill(['google_synced_at' => now(), 'google_extra' => $extra])->save();
-        });
-
-        return $resumen;
+        return $datos;
     }
 }

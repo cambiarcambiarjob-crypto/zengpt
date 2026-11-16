@@ -14,11 +14,13 @@ export interface Vendedor { id: number; name: string; is_owner: boolean }
 export interface Espacio {
     id: number; account_id: number; account_email: string | null; position: number;
     client_email: string; client_phone: string | null; price_cents: number;
-    seller_id: number; seller_name: string | null; sold_on: string; paid_on: string | null;
+    seller_id: number | null; seller_name: string | null; sold_on: string; paid_on: string | null;
     invite_url: string | null; invite_expires_on: string | null;
     invite_status: 'sin_liga' | 'lista' | 'enviada' | 'aceptada' | 'caducada';
     /** Lo que dice Google en la última revisión del grupo (null = nunca se revisó). */
     google_status: 'miembro' | 'invitado' | 'ausente' | null;
+    /** 'google' = se dio de alta solo al encontrarlo en el grupo de Google (llega sin precio ni vendedor). */
+    origen: 'google' | null;
 }
 
 export interface Cuenta {
