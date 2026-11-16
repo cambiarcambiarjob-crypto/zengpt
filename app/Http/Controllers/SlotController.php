@@ -31,7 +31,7 @@ class SlotController extends Controller
                 return false;
             }
 
-            $cuenta->slots()->create($data + ['position' => $posicion, 'created_by' => $request->user()->id]);
+            $cuenta->slots()->create($data + $this->invitacionInicial($request) + ['position' => $posicion, 'created_by' => $request->user()->id]);
 
             return true;
         });
@@ -118,6 +118,28 @@ class SlotController extends Controller
         $slot->delete();
 
         return back()->with('success', 'Espacio liberado.');
+    }
+
+    /**
+     * Liga de invitación opcional al agregar el cliente (si ya se tiene de antes). Sin fecha, vence en 7 días.
+     *
+     * @return array<string, mixed>
+     */
+    private function invitacionInicial(Request $request): array
+    {
+        $data = $request->validate([
+            'invite_url' => ['nullable', 'url:https,http', 'max:500'],
+            'invite_expires_on' => ['nullable', 'date_format:Y-m-d'],
+        ], [], ['invite_url' => 'liga de invitación', 'invite_expires_on' => 'caducidad de la liga']);
+
+        if (blank($data['invite_url'] ?? null)) {
+            return [];
+        }
+
+        return [
+            'invite_url' => trim($data['invite_url']),
+            'invite_expires_on' => $data['invite_expires_on'] ?? Hoy::carbon()->addDays(7)->toDateString(),
+        ];
     }
 
     /**

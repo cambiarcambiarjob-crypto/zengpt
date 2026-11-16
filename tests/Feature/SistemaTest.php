@@ -267,4 +267,20 @@ class SistemaTest extends TestCase
         $this->assertStringContainsString('href="https://families.example/join/abc"', $html);
         $this->assertStringContainsString('cliente@gmail.com', $html);
     }
+
+    public function test_al_agregar_cliente_se_puede_guardar_ya_su_liga(): void
+    {
+        $cuenta = $this->cuenta();
+        $base = ['price' => 200, 'seller_id' => $this->vendedor('Jorge')->id, 'sold_on' => Hoy::fecha()];
+
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", $base + ['client_email' => 'con@gmail.com', 'invite_url' => 'https://families.example/join/a1'])->assertSessionHasNoErrors();
+        $con = Slot::query()->where('client_email', 'con@gmail.com')->firstOrFail();
+        $this->assertSame('lista', $con->inviteStatus());
+        $this->assertSame(Hoy::carbon()->addDays(7)->toDateString(), $con->invite_expires_on->toDateString());
+
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", $base + ['client_email' => 'sin@gmail.com', 'invite_url' => ''])->assertSessionHasNoErrors();
+        $this->assertSame('sin_liga', Slot::query()->where('client_email', 'sin@gmail.com')->firstOrFail()->inviteStatus());
+
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", $base + ['client_email' => 'mal@gmail.com', 'invite_url' => 'no-es-liga'])->assertSessionHasErrors('invite_url');
+    }
 }
