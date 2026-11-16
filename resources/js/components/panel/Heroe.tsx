@@ -75,7 +75,7 @@ export function Heroe({ nombre, hoy, className }: HeroeProps) {
                     tamano="xl"
                     tono={hoy.neto > 0 ? 'acento' : 'normal'}
                     negativoEnRojo
-                    detalle={sinMovimiento ? 'Aún no hay ventas ni publicidad capturadas hoy.' : 'Neto del día: ventas menos publicidad.'}
+                    detalle={sinMovimiento ? 'Aún no hay ventas ni publicidad capturadas hoy.' : 'Neto del día: ventas menos publicidad y costo de cuentas.'}
                 />
 
                 <dl className="mt-auto flex flex-wrap gap-x-10 gap-y-4 pt-6 sm:pt-8">

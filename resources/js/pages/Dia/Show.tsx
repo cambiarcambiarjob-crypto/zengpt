@@ -101,7 +101,7 @@ export default function DiaShow() {
                         fecha={fecha}
                         publicidad={publicidad}
                         filas={reparto.filas}
-                        ventas={reparto.totales.ventas}
+                        ventas={reparto.totales.ventas - reparto.totales.costo}
                         puedeEditar={puedeEditarPublicidad}
                         alCambiarPendiente={alCambiarPendiente}
                     />

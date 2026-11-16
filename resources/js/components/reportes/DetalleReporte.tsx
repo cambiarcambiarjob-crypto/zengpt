@@ -64,6 +64,7 @@ export function DetalleReporte({ desde, hasta, filas, totales, serie, hoy, dueno
         { clave: 'cantidad', titulo: 'Ventas', numerica: true, celda: (fila) => numero(fila.ventas_count), pie: numero(totales.ventas_count) },
         { clave: 'ventas', titulo: 'Vendido', numerica: true, celda: (fila) => dinero(fila.ventas), pie: dinero(totales.ventas) },
         { clave: 'publicidad', titulo: 'Publicidad', numerica: true, celda: (fila) => dinero(-fila.publicidad), pie: dinero(-totales.publicidad) },
+        { clave: 'costo', titulo: 'Cuentas', numerica: true, celda: (fila) => dinero(-fila.costo), pie: dinero(-totales.costo) },
         { clave: 'neto', titulo: 'Neto', numerica: true, clase: 'font-medium', celda: (fila) => <Monto centavos={fila.neto} />, pie: <Monto centavos={totales.neto} /> },
         {
             clave: 'socio',
@@ -102,7 +103,7 @@ export function DetalleReporte({ desde, hasta, filas, totales, serie, hoy, dueno
 
     const dias = useMemo(() => [...serie].reverse(), [serie]);
     const totalDias = useMemo(
-        () => serie.reduce((suma, dia) => ({ n: suma.n + dia.ventas_count, ventas: suma.ventas + dia.ventas, publicidad: suma.publicidad + dia.publicidad, neto: suma.neto + dia.neto }), { n: 0, ventas: 0, publicidad: 0, neto: 0 }),
+        () => serie.reduce((suma, dia) => ({ n: suma.n + dia.ventas_count, ventas: suma.ventas + dia.ventas, publicidad: suma.publicidad + dia.publicidad, costo: suma.costo + dia.costo, neto: suma.neto + dia.neto }), { n: 0, ventas: 0, publicidad: 0, costo: 0, neto: 0 }),
         [serie],
     );
     const recortada = serie.length > 0 && serie[0].fecha > desde;
@@ -129,6 +130,7 @@ export function DetalleReporte({ desde, hasta, filas, totales, serie, hoy, dueno
         { clave: 'cantidad', titulo: 'Ventas', numerica: true, celda: (dia) => numero(dia.ventas_count), pie: numero(totalDias.n) },
         { clave: 'ventas', titulo: 'Vendido', numerica: true, celda: (dia) => dinero(dia.ventas), pie: dinero(totalDias.ventas) },
         { clave: 'publicidad', titulo: 'Publicidad', numerica: true, celda: (dia) => dinero(-dia.publicidad), pie: dinero(-totalDias.publicidad) },
+        { clave: 'costo', titulo: 'Cuentas', numerica: true, celda: (dia) => dinero(-dia.costo), pie: dinero(-totalDias.costo) },
         { clave: 'neto', titulo: 'Neto', numerica: true, clase: 'font-medium', celda: (dia) => <Monto centavos={dia.neto} />, pie: <Monto centavos={totalDias.neto} /> },
     ];
 
@@ -139,7 +141,7 @@ export function DetalleReporte({ desde, hasta, filas, totales, serie, hoy, dueno
             titulo="Detalle del reporte"
             descripcion={
                 vista === 'vendedor'
-                    ? `${rangoFechas(desde, hasta)} · ${plural(filas.length, 'vendedor', 'vendedores')} · ventas, publicidad y reparto`
+                    ? `${rangoFechas(desde, hasta)} · ${plural(filas.length, 'vendedor', 'vendedores')} · ventas, gastos y reparto`
                     : `${plural(serie.length, 'día')}, del más reciente al más antiguo${recortada ? ' · solo el último año del periodo' : ''}`
             }
             acciones={

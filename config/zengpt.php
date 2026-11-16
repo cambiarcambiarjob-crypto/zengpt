@@ -10,6 +10,9 @@ return [
     'meses_cuenta' => 3,
     // Precios sugeridos en pesos; además se puede capturar uno personalizado.
     'precios' => [200, 400, 500],
+    // Lo que cuesta cada cuenta (pesos). A cada espacio vendido se le carga la parte proporcional (costo ÷ capacidad)
+    // y se descuenta del neto del vendedor, igual que la publicidad.
+    'costo_cuenta' => 117,
     // Porcentaje del socio (Christian) sobre la ganancia después de publicidad.
     'porcentaje_socio' => 10,
     // Porcentaje del vendedor sobre lo que queda después del socio (el resto es del dueño).

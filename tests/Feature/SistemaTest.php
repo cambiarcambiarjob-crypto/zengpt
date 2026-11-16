@@ -152,26 +152,29 @@ class SistemaTest extends TestCase
             ->has('ventas', 3)
             ->where('reparto.totales.ventas', 90000)
             ->where('reparto.totales.publicidad', 10000)
-            ->where('reparto.totales.neto', 80000)
-            // Christian: 10 % de 300 + 10 % de 500 = 30 + 50
-            ->where('reparto.totales.socio', 8000)
-            // Jorge: mitad de 270
-            ->where('reparto.totales.vendedor', 13500)
-            // Leo: 135 (mitad de Jorge) + 450 (su venta)
-            ->where('reparto.totales.dueno', 58500)
+            // Costo de cuentas: 3 espacios × $23.40 ($117 ÷ 5).
+            ->where('reparto.totales.costo', 7020)
+            // Jorge: 400 − 100 − 46.80 = 253.20 · Leo: 500 − 23.40 = 476.60
+            ->where('reparto.totales.neto', 72980)
+            // Christian: 10 % de 253.20 + 10 % de 476.60 = 25.32 + 47.66
+            ->where('reparto.totales.socio', 7298)
+            // Jorge: mitad de 227.88
+            ->where('reparto.totales.vendedor', 11394)
+            // Leo: 113.94 (mitad de Jorge) + 428.94 (su venta)
+            ->where('reparto.totales.dueno', 54288)
             ->where('conEspacio.0.libres', 2));
 
         $this->actingAs($this->admin)->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Dashboard')
-            ->where('hoy.neto', 80000)
-            ->where('mes.socio', 8000)
+            ->where('hoy.neto', 72980)
+            ->where('mes.socio', 7298)
             ->where('cuentas.activas', 1)
             ->where('cuentas.espacios_libres', 2)
             ->has('serie', 30)
             ->has('porVendedorMes', 4));
 
         $this->actingAs($this->admin)->get("/reportes?desde={$hoy}&hasta={$hoy}")->assertInertia(fn (Assert $page) => $page
-            ->component('Reportes/Index')->where('totales.dueno', 58500)->has('filas', 4)->has('serie', 1));
+            ->component('Reportes/Index')->where('totales.dueno', 54288)->has('filas', 4)->has('serie', 1));
     }
 
     public function test_vendedores_y_borrado_de_cuentas_con_clientes_son_del_administrador(): void

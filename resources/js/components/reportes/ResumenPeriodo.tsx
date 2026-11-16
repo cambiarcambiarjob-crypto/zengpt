@@ -63,14 +63,15 @@ const CIFRA_PRINCIPAL = 'max-sm:[&_.font-titulo]:text-2xl 2xl:[&_.font-titulo]:t
 
 /**
  * Las seis cifras del periodo en dos tarjetas con la luz de SpotlightCard y el conteo de CountUp (React Bits):
- * ventas − publicidad = neto, y cómo se reparte ese neto entre socio, vendedores y dueño.
+ * ventas − gastos (publicidad y costo de cuentas) = neto, y cómo se reparte ese neto entre socio, vendedores y dueño.
  */
 export function ResumenPeriodo({ totales, dias, dueno, esAdmin, porcentajeSocio, className }: ResumenPeriodoProps) {
     const listo = useEntrada();
     const hayVentas = totales.ventas_count > 0;
     const ticket = hayVentas ? Math.round(totales.ventas / totales.ventas_count) : 0;
     const repartible = totales.neto > 0;
-    const dePublicidad = proporcion(totales.publicidad, totales.ventas);
+    const gastos = totales.publicidad + totales.costo;
+    const dePublicidad = proporcion(gastos, totales.ventas);
 
     const partes = [
         { clave: 'socio', nombre: `Socio (${porciento(porcentajeSocio)})`, valor: totales.socio, propia: !esAdmin, detalle: `${porciento(porcentajeSocio)} del neto` },
@@ -95,11 +96,11 @@ export function ResumenPeriodo({ totales, dias, dueno, esAdmin, porcentajeSocio,
                     <Operador>−</Operador>
                     <Cifra
                         className={CIFRA_PRINCIPAL}
-                        etiqueta="Publicidad"
+                        etiqueta="Gastos"
                         icono={<Megaphone className="size-4" />}
-                        valor={totales.publicidad}
+                        valor={gastos}
                         tono="suave"
-                        detalle={totales.ventas > 0 ? `${porciento(dePublicidad)} de lo vendido` : totales.publicidad > 0 ? 'Sin ventas que la cubran' : 'Sin gasto capturado'}
+                        detalle={gastos > 0 ? `Publicidad ${dinero(totales.publicidad)} · cuentas ${dinero(totales.costo)}` : 'Sin gastos en el periodo'}
                     />
                     <Operador>=</Operador>
                     <Cifra
@@ -109,7 +110,7 @@ export function ResumenPeriodo({ totales, dias, dueno, esAdmin, porcentajeSocio,
                         valor={totales.neto}
                         tono="acento"
                         negativoEnRojo
-                        detalle={totales.neto < 0 ? 'Se gastó más de lo que se vendió' : dias > 1 ? `${dinero(Math.round(totales.neto / dias))} por día en promedio` : 'Ventas menos publicidad'}
+                        detalle={totales.neto < 0 ? 'Se gastó más de lo que se vendió' : dias > 1 ? `${dinero(Math.round(totales.neto / dias))} por día en promedio` : 'Ventas menos gastos'}
                     />
                 </div>
 
@@ -118,7 +119,7 @@ export function ResumenPeriodo({ totales, dias, dueno, esAdmin, porcentajeSocio,
                     <BarraPartida
                         listo={listo}
                         tramos={[
-                            { clave: 'publicidad', valor: totales.publicidad, color: COLOR_SERIE.publicidad },
+                            { clave: 'publicidad', valor: gastos, color: COLOR_SERIE.publicidad },
                             { clave: 'neto', valor: Math.max(0, totales.neto), color: COLOR_SERIE.neto },
                         ]}
                     />
@@ -127,7 +128,7 @@ export function ResumenPeriodo({ totales, dias, dueno, esAdmin, porcentajeSocio,
                             <>
                                 <span className="flex items-center gap-1.5">
                                     <span className="size-2 rounded-full" style={{ backgroundColor: COLOR_SERIE.publicidad }} aria-hidden="true" />
-                                    Publicidad: ${dePublicidad} de cada $100 vendidos
+                                    Gastos: ${dePublicidad} de cada $100 vendidos
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <span className="size-2 rounded-full" style={{ backgroundColor: COLOR_SERIE.neto }} aria-hidden="true" />
@@ -135,7 +136,7 @@ export function ResumenPeriodo({ totales, dias, dueno, esAdmin, porcentajeSocio,
                                 </span>
                             </>
                         ) : totales.neto < 0 ? (
-                            'La publicidad superó a las ventas del periodo.'
+                            'Los gastos superaron a las ventas del periodo.'
                         ) : (
                             'Sin ventas ni publicidad en el periodo.'
                         )}

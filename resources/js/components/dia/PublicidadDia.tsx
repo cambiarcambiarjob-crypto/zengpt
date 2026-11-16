@@ -21,7 +21,7 @@ export interface PublicidadDiaProps {
     publicidad: Gasto[];
     /** Reparto del día por vendedor: da contexto a cada renglón (cuánto vendió). */
     filas: FilaVendedor[];
-    /** Ventas totales del día en centavos: para mostrar cómo queda el neto con lo capturado. */
+    /** Ventas del día menos el costo de cuentas, en centavos: para mostrar cómo queda el neto con lo capturado. */
     ventas: number;
     puedeEditar: boolean;
     /** Avisa si hay montos escritos sin guardar (la pantalla pregunta antes de cambiar de día). */

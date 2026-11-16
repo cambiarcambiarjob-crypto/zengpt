@@ -34,7 +34,7 @@ function Renglon({ etiqueta, detalle, centavos, mio = false, gasto = false }: { 
 }
 
 /**
- * Ganancia neta de un periodo en una tarjeta destacada (SpotlightCard): de dónde sale (ventas menos publicidad)
+ * Ganancia neta de un periodo en una tarjeta destacada (SpotlightCard): de dónde sale (ventas menos publicidad y costo de cuentas)
  * y cómo se reparte (socio, vendedores y dueño).
  */
 export function CifraPeriodo({ etiqueta, periodo, icono, totales, nombreDueno, porcentajeSocio, esAdmin, className }: CifraPeriodoProps) {
@@ -47,6 +47,7 @@ export function CifraPeriodo({ etiqueta, periodo, icono, totales, nombreDueno, p
                 <dl>
                     <Renglon etiqueta="Ventas" detalle={plural(totales.ventas_count, 'venta')} centavos={totales.ventas} />
                     <Renglon etiqueta="Publicidad" centavos={-totales.publicidad} gasto />
+                    <Renglon etiqueta="Costo de cuentas" centavos={-totales.costo} gasto />
                 </dl>
                 <p className="mt-2 border-t border-borde/70 pt-2.5 text-[11px] font-semibold tracking-wider text-tenue uppercase">Cómo se reparte</p>
                 <dl className="mt-1">

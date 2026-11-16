@@ -12,7 +12,7 @@ class RepartoTest extends TestCase
         // Neto $300 → Christian 10 % = $30 → resto $270 → Leo $135 y Jorge $135.
         $r = Reparto::calcular(40000, 10000, esDueno: false);
 
-        $this->assertSame(['ventas' => 40000, 'publicidad' => 10000, 'neto' => 30000, 'socio' => 3000, 'vendedor' => 13500, 'dueno' => 13500], $r);
+        $this->assertSame(['ventas' => 40000, 'publicidad' => 10000, 'costo' => 0, 'neto' => 30000, 'socio' => 3000, 'vendedor' => 13500, 'dueno' => 13500], $r);
     }
 
     public function test_si_vende_el_dueno_no_hay_mitad_y_mitad_pero_el_socio_cobra_su_10(): void

@@ -52,10 +52,10 @@ export interface DatosCsvVendedores {
 
 /** Las filas del reporte por vendedor, con el renglón de totales al final. Montos en pesos. */
 export function csvPorVendedor({ desde, hasta, filas, totales, dueno, porcentajeSocio }: DatosCsvVendedores): Celda[][] {
-    const renglon = (nombre: string, t: Totales): Celda[] => [desde, hasta, nombre, t.ventas_count, monto(t.ventas), monto(t.publicidad), monto(t.neto), monto(t.socio), monto(t.vendedor), monto(t.dueno)];
+    const renglon = (nombre: string, t: Totales): Celda[] => [desde, hasta, nombre, t.ventas_count, monto(t.ventas), monto(t.publicidad), monto(t.costo), monto(t.neto), monto(t.socio), monto(t.vendedor), monto(t.dueno)];
 
     return [
-        ['Desde', 'Hasta', 'Vendedor', 'Ventas', 'Vendido (MXN)', 'Publicidad (MXN)', 'Neto (MXN)', `Socio ${porcentajeSocio}% (MXN)`, 'Parte del vendedor (MXN)', `Parte de ${dueno} (MXN)`],
+        ['Desde', 'Hasta', 'Vendedor', 'Ventas', 'Vendido (MXN)', 'Publicidad (MXN)', 'Costo de cuentas (MXN)', 'Neto (MXN)', `Socio ${porcentajeSocio}% (MXN)`, 'Parte del vendedor (MXN)', `Parte de ${dueno} (MXN)`],
         ...filas.map((fila) => renglon(fila.name, fila)),
         renglon('Total', totales),
     ];
@@ -63,11 +63,11 @@ export function csvPorVendedor({ desde, hasta, filas, totales, dueno, porcentaje
 
 /** La serie por día (un renglón por fecha, en orden), con el total al final. Montos en pesos. */
 export function csvPorDia(serie: DiaSerie[]): Celda[][] {
-    const total = serie.reduce((suma, dia) => ({ n: suma.n + dia.ventas_count, ventas: suma.ventas + dia.ventas, publicidad: suma.publicidad + dia.publicidad, neto: suma.neto + dia.neto }), { n: 0, ventas: 0, publicidad: 0, neto: 0 });
+    const total = serie.reduce((suma, dia) => ({ n: suma.n + dia.ventas_count, ventas: suma.ventas + dia.ventas, publicidad: suma.publicidad + dia.publicidad, costo: suma.costo + dia.costo, neto: suma.neto + dia.neto }), { n: 0, ventas: 0, publicidad: 0, costo: 0, neto: 0 });
 
     return [
-        ['Fecha', 'Ventas', 'Vendido (MXN)', 'Publicidad (MXN)', 'Neto (MXN)'],
-        ...serie.map((dia): Celda[] => [dia.fecha, dia.ventas_count, monto(dia.ventas), monto(dia.publicidad), monto(dia.neto)]),
-        ['Total', total.n, monto(total.ventas), monto(total.publicidad), monto(total.neto)],
+        ['Fecha', 'Ventas', 'Vendido (MXN)', 'Publicidad (MXN)', 'Costo de cuentas (MXN)', 'Neto (MXN)'],
+        ...serie.map((dia): Celda[] => [dia.fecha, dia.ventas_count, monto(dia.ventas), monto(dia.publicidad), monto(dia.costo), monto(dia.neto)]),
+        ['Total', total.n, monto(total.ventas), monto(total.publicidad), monto(total.costo), monto(total.neto)],
     ];
 }

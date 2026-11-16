@@ -155,7 +155,7 @@ export function RankingVendedores({ filas, totales, dueno, porcentajeSocio, porc
                             </li>
                         </ul>
                         <p className="lg:text-right">
-                            Su parte: {mitad} de lo que queda de sus ventas tras la publicidad y el {porciento(porcentajeSocio)} del socio. Cuando vende {dueno}, ese resto es todo suyo.
+                            Su parte: {mitad} de lo que queda de sus ventas tras la publicidad, el costo de cuentas y el {porciento(porcentajeSocio)} del socio. Cuando vende {dueno}, ese resto es todo suyo.
                         </p>
                     </div>
                 </>

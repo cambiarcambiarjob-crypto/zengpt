@@ -5,7 +5,7 @@ namespace App\Support;
 /**
  * Reparto de la ganancia de UN vendedor en un periodo (un día o varios):
  *
- *   neto     = ventas − publicidad del vendedor
+ *   neto     = ventas − publicidad del vendedor − costo de sus espacios (costo de la cuenta ÷ 5 por cliente)
  *   socio    = 10 % del neto                      (Christian, sobre todas las ventas)
  *   resto    = neto − socio
  *   vendedor = mitad del resto                    (0 si el vendedor es el dueño)
@@ -17,11 +17,11 @@ namespace App\Support;
 final class Reparto
 {
     /**
-     * @return array{ventas: int, publicidad: int, neto: int, socio: int, vendedor: int, dueno: int}
+     * @return array{ventas: int, publicidad: int, costo: int, neto: int, socio: int, vendedor: int, dueno: int}
      */
-    public static function calcular(int $ventasCents, int $publicidadCents, bool $esDueno): array
+    public static function calcular(int $ventasCents, int $publicidadCents, bool $esDueno, int $costoCents = 0): array
     {
-        $neto = $ventasCents - $publicidadCents;
+        $neto = $ventasCents - $publicidadCents - $costoCents;
         $socio = (int) round($neto * self::porcentajeSocio() / 100);
         $resto = $neto - $socio;
         $vendedor = $esDueno ? 0 : (int) round($resto * self::porcentajeVendedor() / 100);
@@ -29,6 +29,7 @@ final class Reparto
         return [
             'ventas' => $ventasCents,
             'publicidad' => $publicidadCents,
+            'costo' => $costoCents,
             'neto' => $neto,
             'socio' => $socio,
             'vendedor' => $vendedor,

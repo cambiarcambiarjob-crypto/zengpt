@@ -26,12 +26,12 @@ export interface Cuenta {
     capacidad: number; ocupados: number; libres: number; ingresos: number; pendientes_pago: number; espacios: Espacio[];
 }
 
-/** Reparto de un periodo: ventas − publicidad = neto; socio 10 %; el resto, mitad vendedor y mitad dueño. */
-export interface Totales { ventas_count: number; ventas: number; publicidad: number; neto: number; socio: number; vendedor: number; dueno: number }
+/** Reparto de un periodo: ventas − publicidad − costo de cuentas = neto; socio 10 %; el resto, mitad vendedor y mitad dueño. */
+export interface Totales { ventas_count: number; ventas: number; publicidad: number; costo: number; neto: number; socio: number; vendedor: number; dueno: number }
 
 export interface FilaVendedor extends Totales { seller_id: number; name: string; is_owner: boolean }
 
-export interface DiaSerie { fecha: string; ventas_count: number; ventas: number; publicidad: number; neto: number }
+export interface DiaSerie { fecha: string; ventas_count: number; ventas: number; publicidad: number; costo: number; neto: number }
 
 // Props de cada pantalla
 export interface DashboardProps {

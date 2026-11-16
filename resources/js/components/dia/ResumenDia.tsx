@@ -1,4 +1,4 @@
-import { Megaphone, TrendingUp } from 'lucide-react';
+import { Megaphone, Server, TrendingUp } from 'lucide-react';
 import { FondoAurora } from '@/components/fondos/FondoAurora';
 import CountUp from '@/components/reactbits/CountUp';
 import { Cifra } from '@/components/ui/Cifra';
@@ -50,7 +50,7 @@ export interface ResumenDiaProps {
 }
 
 /**
- * Resumen del cierre: a la izquierda la cuenta del día (ventas − publicidad = neto, la cifra que manda) y a la derecha
+ * Resumen del cierre: a la izquierda la cuenta del día (ventas − publicidad − costo de cuentas = neto, la cifra que manda) y a la derecha
  * cómo se reparte ese neto (socio, vendedores y dueño). Las cifras cuentan desde el valor anterior al cambiar de día
  * o al guardar (CountUp de React Bits); la aurora del encabezado es decorativa y se descarga aparte.
  */
@@ -86,8 +86,8 @@ export function ResumenDia({ totales, esHoy, nombreDueno, porcentajeSocio, esAdm
                                     ? 'Aún no hay ventas ni publicidad capturadas hoy.'
                                     : 'Este día no tuvo ventas ni publicidad.'
                                 : totales.neto < 0
-                                  ? 'La publicidad superó a las ventas: la pérdida se reparte igual que la ganancia.'
-                                  : 'Ventas menos publicidad: lo que se reparte.'
+                                  ? 'Los gastos superaron a las ventas: la pérdida se reparte igual que la ganancia.'
+                                  : 'Ventas menos publicidad y costo de cuentas: lo que se reparte.'
                         }
                     />
 
@@ -99,6 +99,13 @@ export function ResumenDia({ totales, esHoy, nombreDueno, porcentajeSocio, esAdm
                             valor={totales.publicidad === 0 ? 0 : -totales.publicidad}
                             tamano="md"
                             detalle={totales.publicidad > 0 ? 'Se resta de las ventas' : 'Sin gasto capturado'}
+                        />
+                        <Cifra
+                            etiqueta="Costo de cuentas"
+                            icono={<Server className="size-4" />}
+                            valor={totales.costo === 0 ? 0 : -totales.costo}
+                            tamano="md"
+                            detalle={totales.ventas_count > 0 ? `${dinero(Math.round(totales.costo / totales.ventas_count))} por espacio vendido` : 'Sin espacios vendidos'}
                         />
                     </div>
                 </div>

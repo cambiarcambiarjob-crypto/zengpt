@@ -93,13 +93,14 @@ export function RepartoDia({ filas, totales, nombreDueno, porcentajeSocio, porce
         { clave: 'vendedor', titulo: 'Vendedor', celda: (fila) => <Nombre fila={fila} />, pie: 'Total del día' },
         { clave: 'ventas', titulo: 'Ventas', numerica: true, celda: (fila) => <Vendido totales={fila} />, pie: <Vendido totales={totales} />, clase: APRETADA },
         { clave: 'publicidad', titulo: 'Publicidad', numerica: true, celda: (fila) => dinero(fila.publicidad === 0 ? 0 : -fila.publicidad), pie: dinero(totales.publicidad === 0 ? 0 : -totales.publicidad), clase: APRETADA },
+        { clave: 'costo', titulo: 'Cuentas', numerica: true, celda: (fila) => dinero(fila.costo === 0 ? 0 : -fila.costo), pie: dinero(totales.costo === 0 ? 0 : -totales.costo), clase: APRETADA },
         { clave: 'neto', titulo: 'Neto', numerica: true, celda: (fila) => <Monto centavos={fila.neto} />, pie: <Monto centavos={totales.neto} />, clase: cn('font-medium', APRETADA) },
         { clave: 'socio', titulo: tituloSocio, numerica: true, celda: (fila) => <Monto centavos={fila.socio} resaltar={!esAdmin} />, pie: <Monto centavos={totales.socio} resaltar={!esAdmin} />, clase: cn(ENCABEZADO_EN_DOS, APRETADA) },
         { clave: 'parte-vendedor', titulo: 'Para el vendedor', numerica: true, celda: (fila) => <ParteVendedor fila={fila} />, pie: <Monto centavos={totales.vendedor} />, clase: cn(ENCABEZADO_EN_DOS, APRETADA) },
         { clave: 'dueno', titulo: tituloDueno, numerica: true, celda: (fila) => <Monto centavos={fila.dueno} resaltar={esAdmin} />, pie: <Monto centavos={totales.dueno} resaltar={esAdmin} />, clase: ENCABEZADO_EN_DOS },
     ];
 
-    const tarjeta = (clave: string | number, encabezado: ReactNode, datos: Pick<Totales, 'ventas' | 'ventas_count' | 'publicidad' | 'neto'>, partes: ReactNode, total = false) => (
+    const tarjeta = (clave: string | number, encabezado: ReactNode, datos: Pick<Totales, 'ventas' | 'ventas_count' | 'publicidad' | 'costo' | 'neto'>, partes: ReactNode, total = false) => (
         <li key={clave} className={cn('px-5 py-4', total ? 'bg-superficie-2/60' : 'border-b border-borde/70')}>
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -117,6 +118,7 @@ export function RepartoDia({ filas, totales, nombreDueno, porcentajeSocio, porce
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
                 <Par etiqueta="Publicidad">{dinero(datos.publicidad === 0 ? 0 : -datos.publicidad)}</Par>
+                <Par etiqueta="Costo de cuentas">{dinero(datos.costo === 0 ? 0 : -datos.costo)}</Par>
                 {partes}
             </dl>
         </li>
@@ -187,7 +189,7 @@ export function RepartoDia({ filas, totales, nombreDueno, porcentajeSocio, porce
                     ¿Cómo se calcula el reparto?
                 </summary>
                 <p className="animate-aparecer px-5 pb-4 pl-11 text-[13px] leading-relaxed text-suave sm:px-6 sm:pl-12">
-                    <span className="text-texto">Neto = ventas − publicidad</span> · {porciento(porcentajeSocio)} del neto para el socio ·{' '}
+                    <span className="text-texto">Neto = ventas − publicidad − costo de cuentas ($23.40 por espacio)</span> · {porciento(porcentajeSocio)} del neto para el socio ·{' '}
                     {porcentajeVendedor === 50 ? `el resto, mitad para el vendedor y mitad para ${nombreDueno}` : `del resto, ${porciento(porcentajeVendedor)} para el vendedor y lo demás para ${nombreDueno}`}; lo que vende{' '}
                     {nombreDueno} no se reparte con vendedor: después del socio, todo es suyo.
                 </p>
