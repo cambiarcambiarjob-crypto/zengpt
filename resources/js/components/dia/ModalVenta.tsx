@@ -3,6 +3,7 @@ import { CalendarDays, CircleAlert } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import { Boton } from '@/components/ui/Boton';
 import { Campo } from '@/components/ui/Campo';
+import { CasillaPendiente } from '@/components/ui/CasillaPendiente';
 import { Modal } from '@/components/ui/Modal';
 import { Selector } from '@/components/ui/Selector';
 import { SelectorPrecio } from '@/components/ui/SelectorPrecio';
@@ -48,6 +49,7 @@ export function ModalVenta({ fecha, esHoy, cuentas, cuentaInicial, vendedores, a
             price: '',
             seller_id: vendedores.some((vendedor) => String(vendedor.id) === recordado) ? recordado : vendedores.length === 1 ? String(vendedores[0].id) : '',
             sold_on: fecha,
+            pendiente: false,
         };
     });
 
@@ -86,7 +88,7 @@ export function ModalVenta({ fecha, esHoy, cuentas, cuentaInicial, vendedores, a
 
                 // Otra venta: se limpian solo los datos del cliente; cuenta, precio y vendedor se quedan.
                 setCapturadas((n) => n + 1);
-                form.setData((datos) => ({ ...datos, client_email: '', client_phone: '' }));
+                form.setData((datos) => ({ ...datos, client_email: '', client_phone: '', pendiente: false }));
                 campoCorreo.current?.focus();
             },
         });
@@ -206,6 +208,7 @@ export function ModalVenta({ fecha, esHoy, cuentas, cuentaInicial, vendedores, a
                     claseContenedor="sm:col-span-5"
                 />
 
+                <CasillaPendiente marcada={form.data.pendiente} alCambiar={(valor) => form.setData('pendiente', valor)} className="sm:col-span-5" />
 
                 <p role="status" className={cn('text-[13px] text-suave sm:col-span-5', capturadas === 0 && 'sr-only')}>
                     {capturadas > 0 && `${capturadas === 1 ? 'Venta guardada' : `${capturadas} ventas guardadas`} en esta ventana. Captura la siguiente o cierra con «Listo».`}

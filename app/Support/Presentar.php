@@ -28,7 +28,8 @@ final class Presentar
             'capacidad' => Account::capacity(),
             'ocupados' => count($espacios),
             'libres' => max(0, Account::capacity() - count($espacios)),
-            'ingresos' => (int) $account->slots->sum('price_cents'),
+            'ingresos' => (int) $account->slots->whereNotNull('paid_on')->sum('price_cents'),
+            'pendientes_pago' => $account->slots->whereNull('paid_on')->count(),
             'espacios' => $espacios,
         ];
     }
@@ -47,6 +48,7 @@ final class Presentar
             'seller_id' => $slot->seller_id,
             'seller_name' => $slot->seller?->name,
             'sold_on' => $slot->sold_on->toDateString(),
+            'paid_on' => $slot->paid_on?->toDateString(),
             'invite_url' => $slot->invite_url,
             'invite_expires_on' => $slot->invite_expires_on?->toDateString(),
             'invite_status' => $slot->inviteStatus(),

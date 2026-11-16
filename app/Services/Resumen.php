@@ -9,6 +9,7 @@ use App\Support\Reparto;
 use Illuminate\Support\Carbon;
 
 /**
+ * Solo cuentan los clientes que ya pagaron, en la fecha en que pagaron (paid_on).
  * Cifras del negocio entre dos fechas (ambas incluidas, formato Y-m-d): ventas, publicidad y reparto
  * por vendedor, y la serie por día. Las fechas se comparan con whereDate para que funcione igual en
  * SQLite (pruebas) y MySQL (producción).
@@ -21,7 +22,7 @@ class Resumen
     public static function porVendedor(string $desde, string $hasta): array
     {
         $ventas = Slot::query()
-            ->whereDate('sold_on', '>=', $desde)->whereDate('sold_on', '<=', $hasta)
+            ->whereNotNull('paid_on')->whereDate('paid_on', '>=', $desde)->whereDate('paid_on', '<=', $hasta)
             ->selectRaw('seller_id, COUNT(*) as n, SUM(price_cents) as total')
             ->groupBy('seller_id')->get()->keyBy('seller_id');
 
@@ -73,10 +74,10 @@ class Resumen
             $dias[$d->toDateString()] = ['fecha' => $d->toDateString(), 'ventas_count' => 0, 'ventas' => 0, 'publicidad' => 0, 'neto' => 0];
         }
 
-        Slot::query()->whereDate('sold_on', '>=', $desde)->whereDate('sold_on', '<=', $hasta)
-            ->get(['sold_on', 'price_cents'])
+        Slot::query()->whereNotNull('paid_on')->whereDate('paid_on', '>=', $desde)->whereDate('paid_on', '<=', $hasta)
+            ->get(['paid_on', 'price_cents'])
             ->each(function (Slot $slot) use (&$dias): void {
-                $f = $slot->sold_on->toDateString();
+                $f = $slot->paid_on->toDateString();
                 if (isset($dias[$f])) {
                     $dias[$f]['ventas_count']++;
                     $dias[$f]['ventas'] += $slot->price_cents;

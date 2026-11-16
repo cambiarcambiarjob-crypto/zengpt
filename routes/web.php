@@ -29,6 +29,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/espacios/{slot}', [SlotController::class, 'update'])->name('espacios.update');
     Route::put('/espacios/{slot}/invitacion', [SlotController::class, 'invitacion'])->name('espacios.invitacion');
     Route::post('/espacios/{slot}/invitacion/correo', [SlotController::class, 'enviarCorreo'])->middleware('throttle:20,1')->name('espacios.invitacion.correo');
+    Route::put('/espacios/{slot}/pago', [SlotController::class, 'pago'])->name('espacios.pago');
     Route::delete('/espacios/{slot}', [SlotController::class, 'destroy'])->name('espacios.destroy');
 
     Route::get('/dia/{fecha?}', [DayController::class, 'show'])->name('dia.show');

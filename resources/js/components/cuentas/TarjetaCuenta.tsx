@@ -101,6 +101,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                     <div className="sm:text-right">
                         <p className="text-[11px] leading-none font-medium tracking-wider text-tenue uppercase">Ingresos</p>
                         <p className="cifras mt-1.5 font-titulo text-lg leading-none font-semibold text-texto">{dinero(cuenta.ingresos)}</p>
+                        {cuenta.pendientes_pago > 0 && <p className="mt-1 text-[11px] font-medium text-alerta">{cuenta.pendientes_pago} por cobrar</p>}
                     </div>
                     <BarraEspacios ocupados={cuenta.ocupados} capacidad={cuenta.capacidad} conTexto />
                     <div className="-mr-1.5 flex items-center gap-0.5">

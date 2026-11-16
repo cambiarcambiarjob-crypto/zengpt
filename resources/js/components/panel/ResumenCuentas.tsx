@@ -5,7 +5,7 @@ import CountUp from '@/components/reactbits/CountUp';
 import { EnlaceBoton } from '@/components/ui/Boton';
 import { Tarjeta } from '@/components/ui/Tarjeta';
 import { cn } from '@/lib/cn';
-import { numero, plural, porcentaje } from '@/lib/formato';
+import { dinero, numero, plural, porcentaje } from '@/lib/formato';
 import { useMovimientoReducido } from '@/lib/movimiento';
 import type { DashboardProps } from '@/types';
 
@@ -14,7 +14,7 @@ interface Dato {
     etiqueta: string;
     valor: number;
     href: string;
-    tono?: 'acento' | 'peligro';
+    tono?: 'acento' | 'peligro' | 'alerta';
 }
 
 /**
@@ -39,6 +39,7 @@ export function ResumenCuentas({ cuentas, className }: { cuentas: DashboardProps
         { clave: 'activas', etiqueta: 'Cuentas activas', valor: cuentas.activas, href: '/cuentas?estado=activas' },
         { clave: 'libres', etiqueta: 'Espacios libres', valor: cuentas.espacios_libres, href: '/cuentas?estado=con_espacio', tono: cuentas.espacios_libres > 0 ? 'acento' : undefined },
         { clave: 'clientes', etiqueta: 'Clientes totales', valor: cuentas.clientes, href: '/cuentas?estado=todas' },
+        { clave: 'por_cobrar', etiqueta: `Por cobrar · ${dinero(cuentas.pendiente_monto)}`, valor: cuentas.pendientes_pago, href: '/cuentas?estado=por_cobrar', tono: cuentas.pendientes_pago > 0 ? 'alerta' : undefined },
         { clave: 'vencidas', etiqueta: 'Cuentas vencidas', valor: cuentas.vencidas, href: '/cuentas?estado=vencidas', tono: cuentas.vencidas > 0 ? 'peligro' : undefined },
     ];
 
@@ -88,14 +89,14 @@ export function ResumenCuentas({ cuentas, className }: { cuentas: DashboardProps
                 </div>
             </div>
 
-            <ul className="mt-auto grid grid-cols-2 gap-2 pt-5 sm:grid-cols-4 xl:grid-cols-2">
+            <ul className="mt-auto grid grid-cols-2 gap-2 pt-5 sm:grid-cols-5 xl:grid-cols-2">
                 {datos.map((dato) => (
-                    <li key={dato.clave} className="min-w-0">
+                    <li key={dato.clave} className={cn('min-w-0', dato.clave === 'por_cobrar' && 'xl:col-span-2')}>
                         <Link
                             href={dato.href}
                             className="flex h-full flex-col rounded-campo border border-borde bg-superficie-2/60 px-3.5 py-3 transition-colors duration-150 hover:border-borde-fuerte hover:bg-superficie-2"
                         >
-                            <span className={cn('cifras font-titulo text-2xl leading-tight font-semibold', dato.tono === 'acento' ? 'text-acento' : dato.tono === 'peligro' ? 'text-peligro' : 'text-texto')}>
+                            <span className={cn('cifras font-titulo text-2xl leading-tight font-semibold', dato.tono === 'acento' ? 'text-acento' : dato.tono === 'peligro' ? 'text-peligro' : dato.tono === 'alerta' ? 'text-alerta' : 'text-texto')}>
                                 <span className="sr-only">{numero(dato.valor)}</span>
                                 <span aria-hidden="true">
                                     <CountUp to={dato.valor} from={0} duration={0.9} easing="expo" separator="," />

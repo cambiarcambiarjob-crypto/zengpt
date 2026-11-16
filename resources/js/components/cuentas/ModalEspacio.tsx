@@ -3,6 +3,7 @@ import { UserMinus } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { Boton } from '@/components/ui/Boton';
 import { Campo } from '@/components/ui/Campo';
+import { CasillaPendiente } from '@/components/ui/CasillaPendiente';
 import { Modal } from '@/components/ui/Modal';
 import { Selector, type OpcionSelector } from '@/components/ui/Selector';
 import { SelectorPrecio } from '@/components/ui/SelectorPrecio';
@@ -41,6 +42,7 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
             price: espacio ? pesos(espacio.price_cents) || '0' : '',
             seller_id: espacio ? String(espacio.seller_id) : vendedores.some((vendedor) => String(vendedor.id) === recordado) ? recordado : vendedores.length === 1 ? String(vendedores[0].id) : '',
             sold_on: espacio?.sold_on ?? negocio.hoy,
+            pendiente: espacio ? !espacio.paid_on : false,
         };
     });
 
@@ -162,6 +164,8 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                     error={form.errors.sold_on}
                     claseContenedor="sm:col-span-2"
                 />
+
+                <CasillaPendiente marcada={form.data.pendiente} alCambiar={(valor) => form.setData('pendiente', valor)} className="sm:col-span-5" />
             </div>
         </Modal>
     );

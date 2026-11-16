@@ -36,7 +36,9 @@ class SlotController extends Controller
                 $invitacion = ['invite_url' => $liga['url'], 'invite_expires_on' => $liga['expires_on']];
             }
 
-            $cuenta->slots()->create($data + $invitacion + ['position' => $posicion, 'created_by' => $request->user()->id]);
+            $pendiente = $data['pendiente'];
+            unset($data['pendiente']);
+            $cuenta->slots()->create($data + $invitacion + ['position' => $posicion, 'paid_on' => $pendiente ? null : $data['sold_on'], 'created_by' => $request->user()->id]);
 
             return true;
         });
@@ -48,7 +50,12 @@ class SlotController extends Controller
 
     public function update(Request $request, Slot $slot): RedirectResponse
     {
-        $slot->update($this->validated($request));
+        $data = $this->validated($request);
+        $pendiente = $data['pendiente'];
+        unset($data['pendiente']);
+        // Pendiente → sin fecha de pago; pagado → conserva la fecha en que pagó (o la de la venta si no tenía).
+        $data['paid_on'] = $pendiente ? null : ($slot->paid_on?->toDateString() ?? $data['sold_on']);
+        $slot->update($data);
 
         return back()->with('success', 'Espacio actualizado.');
     }
@@ -118,6 +125,19 @@ class SlotController extends Controller
         return back()->with('success', "Invitación enviada a {$slot->client_email}.");
     }
 
+    /** Marca el pago del cliente (cuenta como venta en esa fecha; hoy por defecto) o lo regresa a pendiente. */
+    public function pago(Request $request, Slot $slot): RedirectResponse
+    {
+        $data = $request->validate([
+            'pagado' => ['required', 'boolean'],
+            'fecha' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.Hoy::carbon()->addDay()->toDateString()],
+        ], [], ['fecha' => 'fecha de pago']);
+
+        $slot->update(['paid_on' => $data['pagado'] ? ($data['fecha'] ?? Hoy::fecha()) : null]);
+
+        return back()->with('success', $data['pagado'] ? "Pago registrado: {$slot->client_email}." : "{$slot->client_email} quedó pendiente de pago.");
+    }
+
     public function destroy(Slot $slot): RedirectResponse
     {
         $slot->delete();
@@ -159,6 +179,7 @@ class SlotController extends Controller
             'client_phone' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+()\-\s]{7,30}$/'],
             'price' => ['required', 'numeric', 'min:0', 'max:100000'],
             'seller_id' => ['required', 'integer', Rule::exists('sellers', 'id')->where('active', true)],
+            'pendiente' => ['nullable', 'boolean'],
             'sold_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.Hoy::carbon()->addDay()->toDateString()],
         ], ['client_phone.regex' => 'El teléfono solo puede llevar números, espacios, + y guiones.'], [
             'client_email' => 'Gmail del cliente', 'client_phone' => 'teléfono', 'price' => 'precio', 'seller_id' => 'vendedor', 'sold_on' => 'fecha de venta',
@@ -170,6 +191,7 @@ class SlotController extends Controller
             'price_cents' => (int) round(((float) $data['price']) * 100),
             'seller_id' => (int) $data['seller_id'],
             'sold_on' => $data['sold_on'],
+            'pendiente' => (bool) ($data['pendiente'] ?? false),
         ];
     }
 }

@@ -25,6 +25,7 @@ const InvitacionCuenta = lazy(() => import('@/components/cuentas/InvitacionCuent
 const ESTADOS: { valor: EstadoFiltro; etiqueta: string }[] = [
     { valor: 'activas', etiqueta: 'Activas' },
     { valor: 'con_espacio', etiqueta: 'Con espacio' },
+    { valor: 'por_cobrar', etiqueta: 'Por cobrar' },
     { valor: 'vencidas', etiqueta: 'Vencidas' },
     { valor: 'todas', etiqueta: 'Todas' },
 ];
@@ -223,6 +224,8 @@ export default function CuentasIndex() {
         descripcion = total === 0 ? 'Ninguna cuenta vencida' : plural(total, 'cuenta vencida', 'cuentas vencidas');
     } else if (filtros.estado === 'todas') {
         descripcion = total === 0 ? 'Aún no hay cuentas' : `${plural(total, 'cuenta')} en total · ${textoLibres}`;
+    } else if (filtros.estado === 'por_cobrar') {
+        descripcion = total === 0 ? 'Nadie pendiente de pago' : `${plural(total, 'cuenta')} con clientes pendientes de pago`;
     } else if (filtros.estado === 'con_espacio') {
         descripcion = total === 0 ? 'Ninguna cuenta con espacio' : `${plural(total, 'cuenta')} con espacio · ${textoLibres}`;
     } else {

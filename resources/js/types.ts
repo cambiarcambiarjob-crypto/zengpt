@@ -14,7 +14,7 @@ export interface Vendedor { id: number; name: string; is_owner: boolean }
 export interface Espacio {
     id: number; account_id: number; account_email: string | null; position: number;
     client_email: string; client_phone: string | null; price_cents: number;
-    seller_id: number; seller_name: string | null; sold_on: string;
+    seller_id: number; seller_name: string | null; sold_on: string; paid_on: string | null;
     invite_url: string | null; invite_expires_on: string | null;
     invite_status: 'sin_liga' | 'lista' | 'enviada' | 'aceptada' | 'caducada';
 }
@@ -23,7 +23,7 @@ export interface Cuenta {
     id: number; email: string; password: string | null; twofa_url: string | null;
     invite_links: { position: number; url: string | null; expires_on: string | null }[]; started_on: string; expires_on: string; dias_restantes: number;
     activa: boolean; por_vencer: boolean; notes: string | null;
-    capacidad: number; ocupados: number; libres: number; ingresos: number; espacios: Espacio[];
+    capacidad: number; ocupados: number; libres: number; ingresos: number; pendientes_pago: number; espacios: Espacio[];
 }
 
 /** Reparto de un periodo: ventas − publicidad = neto; socio 10 %; el resto, mitad vendedor y mitad dueño. */
@@ -40,14 +40,14 @@ export interface DashboardProps {
     historico: Totales;
     porVendedorMes: FilaVendedor[];
     serie: DiaSerie[];
-    cuentas: { activas: number; vencidas: number; espacios_ocupados: number; espacios_libres: number; capacidad_total: number; clientes: number };
+    cuentas: { activas: number; vencidas: number; espacios_ocupados: number; espacios_libres: number; capacidad_total: number; clientes: number; pendientes_pago: number; pendiente_monto: number };
     conEspacio: Cuenta[];
     porVencer: Cuenta[];
 }
 
 export interface CuentasProps {
     cuentas: Cuenta[];
-    filtros: { estado: 'activas' | 'vencidas' | 'todas' | 'con_espacio'; q: string };
+    filtros: { estado: 'activas' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
     vendedores: Vendedor[];
 }
 

@@ -29,7 +29,7 @@ class DayController extends Controller
             'anterior' => $dia->copy()->subDay()->toDateString(),
             'siguiente' => $fecha < Hoy::fecha() ? $dia->copy()->addDay()->toDateString() : null,
             'esHoy' => $fecha === Hoy::fecha(),
-            'ventas' => Slot::query()->with(['account', 'seller'])->whereDate('sold_on', $fecha)->orderBy('id')->get()
+            'ventas' => Slot::query()->with(['account', 'seller'])->whereNotNull('paid_on')->whereDate('paid_on', $fecha)->orderBy('id')->get()
                 ->map(fn (Slot $s): array => Presentar::espacio($s))->all(),
             'publicidad' => Seller::query()->ordered()->get()
                 ->filter(fn (Seller $s): bool => $s->active || isset($gastos[$s->id]))

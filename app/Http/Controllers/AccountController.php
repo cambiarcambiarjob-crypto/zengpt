@@ -17,13 +17,14 @@ class AccountController extends Controller
 {
     public function index(Request $request): Response
     {
-        $estado = in_array($request->query('estado'), ['activas', 'vencidas', 'todas', 'con_espacio'], true) ? $request->query('estado') : 'activas';
+        $estado = in_array($request->query('estado'), ['activas', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
         $q = trim((string) $request->query('q'));
 
         $cuentas = Account::query()
             ->with('slots.seller')
             ->when($estado === 'activas' || $estado === 'con_espacio', fn ($query) => $query->active())
             ->when($estado === 'vencidas', fn ($query) => $query->expired())
+            ->when($estado === 'por_cobrar', fn ($query) => $query->whereHas('slots', fn ($s) => $s->whereNull('paid_on')))
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
                 ->where('email', 'like', "%{$q}%")
                 ->orWhereHas('slots', fn ($s) => $s->where('client_email', 'like', "%{$q}%")->orWhere('client_phone', 'like', "%{$q}%"))))

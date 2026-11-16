@@ -12,11 +12,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Slot extends Model
 {
-    protected $fillable = ['account_id', 'position', 'client_email', 'client_phone', 'price_cents', 'seller_id', 'sold_on', 'created_by', 'invite_url', 'invite_expires_on', 'invite_sent_at', 'invite_accepted_at'];
+    protected $fillable = ['account_id', 'position', 'client_email', 'client_phone', 'price_cents', 'seller_id', 'sold_on', 'paid_on', 'created_by', 'invite_url', 'invite_expires_on', 'invite_sent_at', 'invite_accepted_at'];
 
     protected function casts(): array
     {
-        return ['position' => 'integer', 'price_cents' => 'integer', 'sold_on' => 'date:Y-m-d', 'invite_expires_on' => 'date:Y-m-d', 'invite_sent_at' => 'datetime', 'invite_accepted_at' => 'datetime'];
+        return ['position' => 'integer', 'price_cents' => 'integer', 'sold_on' => 'date:Y-m-d', 'paid_on' => 'date:Y-m-d', 'invite_expires_on' => 'date:Y-m-d', 'invite_sent_at' => 'datetime', 'invite_accepted_at' => 'datetime'];
+    }
+
+    /** Si nadie dijo lo contrario, el cliente pagó el día de su venta (los pendientes llegan con paid_on = null). */
+    protected static function booted(): void
+    {
+        static::creating(function (Slot $slot): void {
+            if (! array_key_exists('paid_on', $slot->getAttributes())) {
+                $slot->paid_on = $slot->sold_on;
+            }
+        });
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->paid_on !== null;
     }
 
     public function setClientEmailAttribute(string $value): void

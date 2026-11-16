@@ -326,4 +326,34 @@ class SistemaTest extends TestCase
         $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}", ['email' => 'familia@gmail.com', 'started_on' => Hoy::fecha(), 'invite_links' => ['1' => ['url' => 'no-es-liga']]])
             ->assertSessionHasErrors('invite_links.1.url');
     }
+
+    public function test_un_cliente_pendiente_de_pago_no_cuenta_hasta_que_paga(): void
+    {
+        $hoy = Hoy::fecha();
+        $ayer = Hoy::carbon()->subDay()->toDateString();
+        $cuenta = $this->cuenta();
+        $jorge = $this->vendedor('Jorge');
+
+        // Uno pagado y uno que ya está dentro pero aún no transfiere (ambos vendidos ayer).
+        Slot::query()->create(['account_id' => $cuenta->id, 'position' => 1, 'client_email' => 'paga@gmail.com', 'price_cents' => 20000, 'seller_id' => $jorge->id, 'sold_on' => $ayer]);
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", [
+            'client_email' => 'debe@gmail.com', 'price' => 400, 'seller_id' => $jorge->id, 'sold_on' => $ayer, 'pendiente' => true,
+        ])->assertSessionHasNoErrors();
+        $debe = Slot::query()->where('client_email', 'debe@gmail.com')->firstOrFail();
+        $this->assertNull($debe->paid_on);
+
+        $this->actingAs($this->socio)->get("/dia/{$ayer}")->assertInertia(fn (Assert $page) => $page->where('reparto.totales.ventas', 20000));
+        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $page) => $page
+            ->where('cuentas.pendientes_pago', 1)
+            ->where('cuentas.pendiente_monto', 40000)
+            ->where('cuentas.espacios_libres', 3));
+        $this->actingAs($this->admin)->get('/cuentas?estado=por_cobrar')->assertInertia(fn (Assert $page) => $page->has('cuentas', 1));
+
+        // Paga hoy: cuenta en las ventas de hoy (fecha de pago), no en las de ayer.
+        $this->actingAs($this->socio)->put("/espacios/{$debe->id}/pago", ['pagado' => true])->assertSessionHasNoErrors();
+        $this->assertSame($hoy, $debe->fresh()->paid_on->toDateString());
+        $this->actingAs($this->socio)->get("/dia/{$ayer}")->assertInertia(fn (Assert $page) => $page->where('reparto.totales.ventas', 20000));
+        $this->actingAs($this->socio)->get("/dia/{$hoy}")->assertInertia(fn (Assert $page) => $page->where('reparto.totales.ventas', 40000));
+        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $page) => $page->where('cuentas.pendientes_pago', 0));
+    }
 }
