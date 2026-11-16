@@ -436,7 +436,7 @@ class SistemaTest extends TestCase
 
         // Google cerró la sesión: aviso claro.
         Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'sin_sesion']), exitCode: 1)]);
-        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('error', 'Google cerró la sesión del servidor: entra con «Iniciar sesión (visor)» en la cuenta.');
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('error', 'Google cerró la sesión del servidor: entra con «Abrir visor» en la cuenta.');
     }
 
     public function test_el_visor_de_google_es_para_los_usuarios_del_sistema(): void

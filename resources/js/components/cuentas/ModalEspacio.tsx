@@ -1,17 +1,17 @@
-import { useForm } from "@inertiajs/react";
-import { UserMinus } from "lucide-react";
-import type { FormEvent } from "react";
-import { Boton } from "@/components/ui/Boton";
-import { Campo } from "@/components/ui/Campo";
-import { CasillaGoogle } from "@/components/ui/CasillaGoogle";
-import { CasillaPendiente } from "@/components/ui/CasillaPendiente";
-import { Modal } from "@/components/ui/Modal";
-import { Selector, type OpcionSelector } from "@/components/ui/Selector";
-import { SelectorPrecio } from "@/components/ui/SelectorPrecio";
-import { pesos, plural } from "@/lib/formato";
-import { usePagina } from "@/lib/pagina";
-import type { Compartido, Cuenta, Espacio, Vendedor } from "@/types";
-import { guardarUltimoVendedor, leerUltimoVendedor } from "./utilidades";
+import { useForm } from '@inertiajs/react';
+import { UserMinus } from 'lucide-react';
+import type { FormEvent } from 'react';
+import { Boton } from '@/components/ui/Boton';
+import { Campo } from '@/components/ui/Campo';
+import { CasillaGoogle } from '@/components/ui/CasillaGoogle';
+import { CasillaPendiente } from '@/components/ui/CasillaPendiente';
+import { Modal } from '@/components/ui/Modal';
+import { Selector, type OpcionSelector } from '@/components/ui/Selector';
+import { SelectorPrecio } from '@/components/ui/SelectorPrecio';
+import { pesos, plural } from '@/lib/formato';
+import { usePagina } from '@/lib/pagina';
+import type { Compartido, Cuenta, Espacio, Vendedor } from '@/types';
+import { guardarUltimoVendedor, leerUltimoVendedor } from './utilidades';
 
 export interface ModalEspacioProps {
     cuenta: Cuenta;
@@ -30,50 +30,33 @@ export interface ModalEspacioProps {
  * Agregar o editar al cliente de un espacio. Se monta solo mientras está abierto. Pensado para capturar rápido:
  * el foco cae en el Gmail, el vendedor es el último que se usó en este navegador, la fecha es hoy y Enter guarda.
  */
-export function ModalEspacio({
-    cuenta,
-    espacio,
-    vendedores,
-    alCerrar,
-    alGuardar,
-    alLiberar,
-}: ModalEspacioProps) {
+export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar, alLiberar }: ModalEspacioProps) {
     const { negocio } = usePagina();
     const editando = espacio !== null;
 
     // Llegó solo desde Google: precio y vendedor se completan después (no son obligatorios).
-    const deGoogle = espacio?.origen === "google";
-    const sinPrecio =
-        deGoogle && espacio?.price_cents === 0 && espacio?.seller_id === null;
+    const deGoogle = espacio?.origen === 'google';
+    const sinPrecio = deGoogle && espacio?.price_cents === 0 && espacio?.seller_id === null;
     const form = useForm(() => {
         const recordado = leerUltimoVendedor();
 
         return {
-            client_email: espacio?.client_email ?? "",
-            client_phone: espacio?.client_phone ?? "",
-            price: espacio
-                ? sinPrecio
-                    ? ""
-                    : pesos(espacio.price_cents) || "0"
-                : "",
+            client_email: espacio?.client_email ?? '',
+            client_phone: espacio?.client_phone ?? '',
+            price: espacio ? (sinPrecio ? '' : pesos(espacio.price_cents) || '0') : '',
             seller_id: espacio
                 ? espacio.seller_id
                     ? String(espacio.seller_id)
-                    : ""
-                : vendedores.some(
-                        (vendedor) => String(vendedor.id) === recordado,
-                    )
+                    : ''
+                : vendedores.some((vendedor) => String(vendedor.id) === recordado)
                   ? recordado
                   : vendedores.length === 1
                     ? String(vendedores[0].id)
-                    : "",
+                    : '',
             sold_on: espacio?.sold_on ?? negocio.hoy,
             pendiente: espacio ? !espacio.paid_on : false,
             // Si la cuenta tiene ligas por mandar, al cliente se le manda la liga: no se invita su correo.
-            invitar_google:
-                !espacio &&
-                cuenta.google.conectada &&
-                cuenta.google.ligas === 0,
+            invitar_google: !espacio && cuenta.google.conectada && cuenta.google.ligas === 0,
         };
     });
 
@@ -82,14 +65,10 @@ export function ModalEspacio({
         etiqueta: vendedor.name,
     }));
     // Si el vendedor original ya no está activo, se muestra igual: el servidor pedirá elegir uno activo al guardar.
-    if (
-        espacio &&
-        espacio.seller_id !== null &&
-        !vendedores.some((vendedor) => vendedor.id === espacio.seller_id)
-    ) {
+    if (espacio && espacio.seller_id !== null && !vendedores.some((vendedor) => vendedor.id === espacio.seller_id)) {
         opciones.push({
             valor: espacio.seller_id,
-            etiqueta: `${espacio.seller_name ?? "Vendedor"} (inactivo)`,
+            etiqueta: `${espacio.seller_name ?? 'Vendedor'} (inactivo)`,
         });
     }
 
@@ -123,13 +102,11 @@ export function ModalEspacio({
         <Modal
             abierto
             alCerrar={alCerrar}
-            titulo={editando ? "Editar cliente" : "Agregar cliente"}
+            titulo={editando ? 'Editar cliente' : 'Agregar cliente'}
             descripcion={
                 <>
                     <span className="break-all text-texto">{cuenta.email}</span>
-                    {editando
-                        ? ` · espacio ${espacio.position}`
-                        : ` · ${cuenta.libres === 1 ? "queda 1 espacio libre" : `quedan ${plural(cuenta.libres, "espacio")} libres`}`}
+                    {editando ? ` · espacio ${espacio.position}` : ` · ${cuenta.libres === 1 ? 'queda 1 espacio libre' : `quedan ${plural(cuenta.libres, 'espacio')} libres`}`}
                 </>
             }
             alEnviar={enviar}
@@ -140,31 +117,18 @@ export function ModalEspacio({
                         <Boton
                             variante="fantasma"
                             className="text-peligro! hover:bg-peligro/12! sm:mr-auto"
-                            icono={
-                                <UserMinus
-                                    className="size-4"
-                                    aria-hidden="true"
-                                />
-                            }
+                            icono={<UserMinus className="size-4" aria-hidden="true" />}
                             disabled={form.processing}
                             onClick={() => alLiberar(cuenta, espacio)}
                         >
                             Liberar espacio
                         </Boton>
                     )}
-                    <Boton
-                        variante="fantasma"
-                        onClick={alCerrar}
-                        disabled={form.processing}
-                    >
+                    <Boton variante="fantasma" onClick={alCerrar} disabled={form.processing}>
                         Cancelar
                     </Boton>
-                    <Boton
-                        type="submit"
-                        variante="primario"
-                        cargando={form.processing}
-                    >
-                        {editando ? "Guardar cambios" : "Agregar cliente"}
+                    <Boton type="submit" variante="primario" cargando={form.processing}>
+                        {editando ? 'Guardar cambios' : 'Agregar cliente'}
                     </Boton>
                 </>
             }
@@ -181,9 +145,7 @@ export function ModalEspacio({
                     placeholder="cliente@gmail.com"
                     maxLength={255}
                     value={form.data.client_email}
-                    onChange={(evento) =>
-                        form.setData("client_email", evento.target.value)
-                    }
+                    onChange={(evento) => form.setData('client_email', evento.target.value)}
                     error={form.errors.client_email}
                     claseContenedor="sm:col-span-3"
                 />
@@ -198,35 +160,21 @@ export function ModalEspacio({
                     maxLength={30}
                     className="cifras"
                     value={form.data.client_phone}
-                    onChange={(evento) =>
-                        form.setData("client_phone", evento.target.value)
-                    }
+                    onChange={(evento) => form.setData('client_phone', evento.target.value)}
                     error={form.errors.client_phone}
                     claseContenedor="sm:col-span-2"
                 />
 
-                <SelectorPrecio
-                    valor={form.data.price}
-                    alCambiar={(valor) => form.setData("price", valor)}
-                    precios={negocio.precios}
-                    error={form.errors.price}
-                    className="sm:col-span-5"
-                />
+                <SelectorPrecio valor={form.data.price} alCambiar={(valor) => form.setData('price', valor)} precios={negocio.precios} error={form.errors.price} className="sm:col-span-5" />
 
                 <Selector
                     etiqueta="Vendedor"
                     value={form.data.seller_id}
-                    onChange={(evento) =>
-                        form.setData("seller_id", evento.target.value)
-                    }
+                    onChange={(evento) => form.setData('seller_id', evento.target.value)}
                     opciones={opciones}
                     marcador="Elige un vendedor…"
                     error={form.errors.seller_id}
-                    ayuda={
-                        editando
-                            ? undefined
-                            : "Se recuerda el último que usaste."
-                    }
+                    ayuda={editando ? undefined : 'Se recuerda el último que usaste.'}
                     claseContenedor="sm:col-span-3"
                 />
 
@@ -236,38 +184,26 @@ export function ModalEspacio({
                     type="date"
                     max={negocio.hoy}
                     value={form.data.sold_on}
-                    onChange={(evento) =>
-                        form.setData("sold_on", evento.target.value)
-                    }
+                    onChange={(evento) => form.setData('sold_on', evento.target.value)}
                     error={form.errors.sold_on}
                     claseContenedor="sm:col-span-2"
                 />
 
-                <CasillaPendiente
-                    marcada={form.data.pendiente}
-                    alCambiar={(valor) => form.setData("pendiente", valor)}
-                    className="sm:col-span-5"
-                />
+                <CasillaPendiente marcada={form.data.pendiente} alCambiar={(valor) => form.setData('pendiente', valor)} className="sm:col-span-5" />
                 {!editando && cuenta.google.conectada && (
                     <CasillaGoogle
                         marcada={form.data.invitar_google}
-                        alCambiar={(valor) =>
-                            form.setData("invitar_google", valor)
-                        }
+                        alCambiar={(valor) => form.setData('invitar_google', valor)}
                         ayuda={
                             cuenta.google.ligas > 0
-                                ? `Esta cuenta tiene ${cuenta.google.ligas === 1 ? "1 liga" : `${cuenta.google.ligas} ligas`} por mandar: mándale una al cliente. Marca esto solo si prefieres que Google lo invite a su correo.`
+                                ? `Esta cuenta tiene ${cuenta.google.ligas === 1 ? '1 liga' : `${cuenta.google.ligas} ligas`} por mandar: mándale una al cliente. Marca esto solo si prefieres que Google lo invite a su correo.`
                                 : undefined
                         }
                         className="sm:col-span-5"
                     />
                 )}
                 {deGoogle && (
-                    <p className="text-[13px] text-suave sm:col-span-5">
-                        Llegó desde el grupo de Google: precio y vendedor son
-                        opcionales. Ponlos cuando pague para que cuente en las
-                        ventas.
-                    </p>
+                    <p className="text-[13px] text-suave sm:col-span-5">Llegó desde el grupo de Google: precio y vendedor son opcionales. Ponlos cuando pague para que cuente en las ventas.</p>
                 )}
             </div>
         </Modal>
