@@ -6,7 +6,7 @@ import { Campo } from '@/components/ui/Campo';
 import { Modal } from '@/components/ui/Modal';
 import { Selector, type OpcionSelector } from '@/components/ui/Selector';
 import { SelectorPrecio } from '@/components/ui/SelectorPrecio';
-import { pesos, plural, sumarDias } from '@/lib/formato';
+import { pesos, plural } from '@/lib/formato';
 import { usePagina } from '@/lib/pagina';
 import type { Compartido, Cuenta, Espacio, Vendedor } from '@/types';
 import { guardarUltimoVendedor, leerUltimoVendedor } from './utilidades';
@@ -41,8 +41,6 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
             price: espacio ? pesos(espacio.price_cents) || '0' : '',
             seller_id: espacio ? String(espacio.seller_id) : vendedores.some((vendedor) => String(vendedor.id) === recordado) ? recordado : vendedores.length === 1 ? String(vendedores[0].id) : '',
             sold_on: espacio?.sold_on ?? negocio.hoy,
-            invite_url: '',
-            invite_expires_on: sumarDias(negocio.hoy, 7),
         };
     });
 
@@ -164,36 +162,6 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                     error={form.errors.sold_on}
                     claseContenedor="sm:col-span-2"
                 />
-                {!editando && (
-                    <>
-                {/* Opcional: si la liga del grupo familiar ya existe, se guarda desde ahora (se puede agregar después). */}
-                <Campo
-                    etiqueta="Liga de invitación"
-                    opcional
-                    type="url"
-                    inputMode="url"
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="https://families.google.com/join/…"
-                    maxLength={500}
-                    value={form.data.invite_url}
-                    onChange={(evento) => form.setData('invite_url', evento.target.value)}
-                    error={form.errors.invite_url}
-                    claseContenedor="sm:col-span-3"
-                />
-                {form.data.invite_url.trim() !== '' && (
-                    <Campo
-                        etiqueta="La liga caduca el"
-                        type="date"
-                        min={negocio.hoy}
-                        value={form.data.invite_expires_on}
-                        onChange={(evento) => form.setData('invite_expires_on', evento.target.value)}
-                        error={form.errors.invite_expires_on}
-                        claseContenedor="sm:col-span-2"
-                    />
-                )}
-                    </>
-                )}
             </div>
         </Modal>
     );

@@ -44,7 +44,8 @@ class AccountController extends Controller
         $data = $this->validated($request);
         $inicio = Carbon::parse($data['started_on']);
 
-        Account::query()->create([
+        $cuenta = Account::query()->create([
+            'invite_links' => $this->ligas($data),
             'email' => $data['email'],
             'password' => filled($data['password'] ?? null) ? $data['password'] : null,
             'twofa_url' => filled($data['twofa_url'] ?? null) ? trim($data['twofa_url']) : null,
@@ -53,6 +54,7 @@ class AccountController extends Controller
             'notes' => $data['notes'] ?? null,
             'created_by' => $request->user()->id,
         ]);
+        $cuenta->syncInviteLinks();
 
         return back()->with('success', 'Cuenta agregada.');
     }
@@ -63,6 +65,7 @@ class AccountController extends Controller
         $inicio = Carbon::parse($data['started_on']);
 
         $account->update([
+            'invite_links' => $this->ligas($data),
             'email' => $data['email'],
             'password' => filled($data['password'] ?? null) ? $data['password'] : null,
             'twofa_url' => filled($data['twofa_url'] ?? null) ? trim($data['twofa_url']) : null,
@@ -73,6 +76,8 @@ class AccountController extends Controller
                 : $inicio->copy()->addMonthsNoOverflow((int) config('zengpt.meses_cuenta'))->toDateString(),
             'notes' => $data['notes'] ?? null,
         ]);
+
+        $account->syncInviteLinks();
 
         return back()->with('success', 'Cuenta actualizada.');
     }
@@ -89,6 +94,30 @@ class AccountController extends Controller
         return back()->with('success', 'Cuenta eliminada.');
     }
 
+    /**
+     * Ligas por espacio normalizadas: {"1": {url, expires_on}, …}. Sin fecha, la liga vence en 7 días.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, array{url: string, expires_on: string}>|null
+     */
+    private function ligas(array $data): ?array
+    {
+        $ligas = [];
+
+        foreach ((array) ($data['invite_links'] ?? []) as $posicion => $liga) {
+            $posicion = (int) $posicion;
+            $url = trim((string) ($liga['url'] ?? ''));
+
+            if ($posicion < 1 || $posicion > Account::capacity() || $url === '') {
+                continue;
+            }
+
+            $ligas[(string) $posicion] = ['url' => $url, 'expires_on' => $liga['expires_on'] ?? Hoy::carbon()->addDays(7)->toDateString()];
+        }
+
+        return $ligas === [] ? null : $ligas;
+    }
+
     /** @return array<string, mixed> */
     private function validated(Request $request, ?Account $account = null): array
     {
@@ -98,9 +127,12 @@ class AccountController extends Controller
             'email' => ['required', 'email:rfc', 'max:255', Rule::unique('accounts', 'email')->ignore($account?->id)],
             'password' => ['nullable', 'string', 'max:255'],
             'twofa_url' => ['nullable', 'url:https,http', 'max:500'],
+            'invite_links' => ['nullable', 'array', 'max:'.Account::capacity()],
+            'invite_links.*.url' => ['nullable', 'url:https,http', 'max:500'],
+            'invite_links.*.expires_on' => ['nullable', 'date_format:Y-m-d'],
             'started_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.Hoy::carbon()->addDay()->toDateString()],
             'expires_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:started_on'],
             'notes' => ['nullable', 'string', 'max:500'],
-        ], ['email.unique' => 'Esa cuenta ya está registrada.'], ['email' => 'correo de la cuenta', 'password' => 'contraseña de la cuenta', 'twofa_url' => 'liga de 2FA', 'started_on' => 'fecha de inicio', 'expires_on' => 'fecha de vencimiento', 'notes' => 'notas']);
+        ], ['email.unique' => 'Esa cuenta ya está registrada.'], ['email' => 'correo de la cuenta', 'password' => 'contraseña de la cuenta', 'twofa_url' => 'liga de 2FA', 'invite_links.*.url' => 'liga de invitación', 'invite_links.*.expires_on' => 'caducidad de la liga', 'started_on' => 'fecha de inicio', 'expires_on' => 'fecha de vencimiento', 'notes' => 'notas']);
     }
 }

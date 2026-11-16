@@ -31,7 +31,12 @@ class SlotController extends Controller
                 return false;
             }
 
-            $cuenta->slots()->create($data + $this->invitacionInicial($request) + ['position' => $posicion, 'created_by' => $request->user()->id]);
+            $invitacion = $this->invitacionInicial($request);
+            if ($invitacion === [] && ($liga = $cuenta->inviteLinkFor($posicion)) !== null) {
+                $invitacion = ['invite_url' => $liga['url'], 'invite_expires_on' => $liga['expires_on']];
+            }
+
+            $cuenta->slots()->create($data + $invitacion + ['position' => $posicion, 'created_by' => $request->user()->id]);
 
             return true;
         });

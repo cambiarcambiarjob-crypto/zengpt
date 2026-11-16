@@ -283,4 +283,47 @@ class SistemaTest extends TestCase
 
         $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", $base + ['client_email' => 'mal@gmail.com', 'invite_url' => 'no-es-liga'])->assertSessionHasErrors('invite_url');
     }
+
+    public function test_las_ligas_se_capturan_en_la_cuenta_y_cada_cliente_toma_la_de_su_espacio(): void
+    {
+        $vence = Hoy::carbon()->addDays(5)->toDateString();
+        $this->actingAs($this->socio)->post('/cuentas', [
+            'email' => 'familia@gmail.com', 'started_on' => Hoy::fecha(),
+            'invite_links' => ['1' => ['url' => 'https://families.example/join/uno', 'expires_on' => $vence], '2' => ['url' => 'https://families.example/join/dos'], '3' => ['url' => '']],
+        ])->assertSessionHasNoErrors();
+        $cuenta = Account::query()->where('email', 'familia@gmail.com')->firstOrFail();
+        $this->assertSame([1, 2], array_keys($cuenta->invite_links));
+
+        $base = ['price' => 200, 'seller_id' => $this->vendedor('Jorge')->id, 'sold_on' => Hoy::fecha()];
+        foreach (['a', 'b', 'c'] as $n) {
+            $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", $base + ['client_email' => "{$n}@gmail.com"])->assertSessionHasNoErrors();
+        }
+        $slots = $cuenta->slots()->get()->keyBy('position');
+        $this->assertSame('https://families.example/join/uno', $slots[1]->invite_url);
+        $this->assertSame($vence, $slots[1]->invite_expires_on->toDateString());
+        $this->assertSame('https://families.example/join/dos', $slots[2]->invite_url);
+        $this->assertSame(Hoy::carbon()->addDays(7)->toDateString(), $slots[2]->invite_expires_on->toDateString());
+        $this->assertSame('sin_liga', $slots[3]->inviteStatus());
+
+        // El cliente 1 ya recibió la invitación y el 2 ya aceptó; luego se pegan ligas nuevas en la cuenta.
+        $slots[1]->update(['invite_sent_at' => now()]);
+        $slots[2]->update(['invite_accepted_at' => now()]);
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}", [
+            'email' => 'familia@gmail.com', 'started_on' => Hoy::fecha(),
+            'invite_links' => ['1' => ['url' => 'https://families.example/join/uno-nueva'], '2' => ['url' => 'https://families.example/join/dos-nueva'], '3' => ['url' => 'https://families.example/join/tres']],
+        ])->assertSessionHasNoErrors();
+
+        $slots = $cuenta->slots()->get()->keyBy('position');
+        $this->assertSame('https://families.example/join/uno-nueva', $slots[1]->invite_url);
+        $this->assertSame('lista', $slots[1]->inviteStatus(), 'liga nueva: hay que volver a enviarla');
+        $this->assertSame('https://families.example/join/dos', $slots[2]->invite_url, 'el que ya aceptó no se toca');
+        $this->assertSame('https://families.example/join/tres', $slots[3]->invite_url);
+
+        $this->actingAs($this->socio)->get('/cuentas')->assertInertia(fn (Assert $page) => $page
+            ->where('cuentas.0.invite_links.0.url', 'https://families.example/join/uno-nueva')
+            ->where('cuentas.0.invite_links.4.url', null));
+
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}", ['email' => 'familia@gmail.com', 'started_on' => Hoy::fecha(), 'invite_links' => ['1' => ['url' => 'no-es-liga']]])
+            ->assertSessionHasErrors('invite_links.1.url');
+    }
 }

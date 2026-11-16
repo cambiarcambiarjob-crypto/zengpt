@@ -18,6 +18,7 @@ final class Presentar
             'email' => $account->email,
             'password' => $account->password,
             'twofa_url' => $account->twofa_url,
+            'invite_links' => collect(range(1, Account::capacity()))->map(fn (int $p): array => ['position' => $p] + ($account->inviteLinkFor($p) ?? ['url' => null, 'expires_on' => null]))->all(),
             'started_on' => $account->started_on->toDateString(),
             'expires_on' => $account->expires_on->toDateString(),
             'dias_restantes' => $account->daysLeft(),

@@ -14,11 +14,11 @@ class Account extends Model
 {
     protected $hidden = ['password'];
 
-    protected $fillable = ['email', 'password', 'twofa_url', 'started_on', 'expires_on', 'notes', 'created_by'];
+    protected $fillable = ['email', 'password', 'twofa_url', 'invite_links', 'started_on', 'expires_on', 'notes', 'created_by'];
 
     protected function casts(): array
     {
-        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted'];
+        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array'];
     }
 
     public function setEmailAttribute(string $value): void
@@ -55,6 +55,42 @@ class Account extends Model
     public static function capacity(): int
     {
         return (int) config('zengpt.capacidad', 5);
+    }
+
+    /**
+     * Liga de invitación del espacio $position, o null si la cuenta no tiene liga para ese espacio.
+     *
+     * @return array{url: string, expires_on: ?string}|null
+     */
+    public function inviteLinkFor(int $position): ?array
+    {
+        $liga = ($this->invite_links ?? [])[(string) $position] ?? null;
+
+        return is_array($liga) && filled($liga['url'] ?? null) ? ['url' => $liga['url'], 'expires_on' => $liga['expires_on'] ?? null] : null;
+    }
+
+    /**
+     * Lleva las ligas de la cuenta a sus clientes: el cliente de cada espacio toma la liga de ese espacio si es
+     * distinta a la que tenía y todavía no aceptó (una liga nueva reinicia «enviada»).
+     */
+    public function syncInviteLinks(): void
+    {
+        foreach ($this->slots()->get() as $slot) {
+            $liga = $this->inviteLinkFor($slot->position);
+
+            if ($liga === null || $slot->invite_accepted_at !== null) {
+                continue;
+            }
+
+            if ($liga['url'] !== $slot->invite_url || $liga['expires_on'] !== $slot->invite_expires_on?->toDateString()) {
+                $cambiaLiga = $liga['url'] !== $slot->invite_url;
+                $slot->fill(['invite_url' => $liga['url'], 'invite_expires_on' => $liga['expires_on']]);
+                if ($cambiaLiga) {
+                    $slot->invite_sent_at = null;
+                }
+                $slot->save();
+            }
+        }
     }
 
     /** Primera posición libre (1..capacidad) o null si la cuenta está llena. */

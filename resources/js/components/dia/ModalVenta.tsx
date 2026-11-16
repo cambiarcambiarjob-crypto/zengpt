@@ -7,7 +7,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Selector } from '@/components/ui/Selector';
 import { SelectorPrecio } from '@/components/ui/SelectorPrecio';
 import { cn } from '@/lib/cn';
-import { fechaLarga, plural, sumarDias } from '@/lib/formato';
+import { fechaLarga, plural } from '@/lib/formato';
 import { usePagina } from '@/lib/pagina';
 import type { Compartido, Cuenta, Vendedor } from '@/types';
 import { guardarUltimoVendedor, leerUltimoVendedor } from './utilidades';
@@ -48,8 +48,6 @@ export function ModalVenta({ fecha, esHoy, cuentas, cuentaInicial, vendedores, a
             price: '',
             seller_id: vendedores.some((vendedor) => String(vendedor.id) === recordado) ? recordado : vendedores.length === 1 ? String(vendedores[0].id) : '',
             sold_on: fecha,
-            invite_url: '',
-            invite_expires_on: sumarDias(negocio.hoy, 7),
         };
     });
 
@@ -88,7 +86,7 @@ export function ModalVenta({ fecha, esHoy, cuentas, cuentaInicial, vendedores, a
 
                 // Otra venta: se limpian solo los datos del cliente; cuenta, precio y vendedor se quedan.
                 setCapturadas((n) => n + 1);
-                form.setData((datos) => ({ ...datos, client_email: '', client_phone: '', invite_url: '' }));
+                form.setData((datos) => ({ ...datos, client_email: '', client_phone: '' }));
                 campoCorreo.current?.focus();
             },
         });
@@ -208,32 +206,6 @@ export function ModalVenta({ fecha, esHoy, cuentas, cuentaInicial, vendedores, a
                     claseContenedor="sm:col-span-5"
                 />
 
-                {/* Opcional: si la liga del grupo familiar ya existe, se guarda desde ahora (se puede agregar después). */}
-                <Campo
-                    etiqueta="Liga de invitación"
-                    opcional
-                    type="url"
-                    inputMode="url"
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="https://families.google.com/join/…"
-                    maxLength={500}
-                    value={form.data.invite_url}
-                    onChange={(evento) => form.setData('invite_url', evento.target.value)}
-                    error={form.errors.invite_url}
-                    claseContenedor="sm:col-span-3"
-                />
-                {form.data.invite_url.trim() !== '' && (
-                    <Campo
-                        etiqueta="La liga caduca el"
-                        type="date"
-                        min={negocio.hoy}
-                        value={form.data.invite_expires_on}
-                        onChange={(evento) => form.setData('invite_expires_on', evento.target.value)}
-                        error={form.errors.invite_expires_on}
-                        claseContenedor="sm:col-span-2"
-                    />
-                )}
 
                 <p role="status" className={cn('text-[13px] text-suave sm:col-span-5', capturadas === 0 && 'sr-only')}>
                     {capturadas > 0 && `${capturadas === 1 ? 'Venta guardada' : `${capturadas} ventas guardadas`} en esta ventana. Captura la siguiente o cierra con «Listo».`}

@@ -5,7 +5,7 @@ import { Boton } from '@/components/ui/Boton';
 import { Campo, CampoArea } from '@/components/ui/Campo';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
-import { diasEnPalabras, diasEntre, fechaMedia, plural } from '@/lib/formato';
+import { diasEnPalabras, diasEntre, fechaMedia, plural, sumarDias } from '@/lib/formato';
 import { usePagina } from '@/lib/pagina';
 import type { Compartido, Cuenta } from '@/types';
 import { esFechaIso, sumarMeses } from './utilidades';
@@ -41,6 +41,10 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
         started_on: cuenta?.started_on ?? negocio.hoy,
         expires_on: puedeFijar && fijadaDeOrigen ? cuenta.expires_on : '',
         notes: cuenta?.notes ?? '',
+        invite_links: Array.from({ length: negocio.capacidad }, (_, i) => {
+            const liga = cuenta?.invite_links.find((l) => l.position === i + 1);
+            return { url: liga?.url ?? '', expires_on: liga?.expires_on ?? sumarDias(negocio.hoy, 7) };
+        }),
     });
 
     const inicioValido = esFechaIso(form.data.started_on);
@@ -59,6 +63,7 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
             twofa_url: datos.twofa_url.trim(),
             started_on: datos.started_on,
             notes: datos.notes.trim(),
+            invite_links: Object.fromEntries(datos.invite_links.map((l, i) => [String(i + 1), { url: l.url.trim(), expires_on: l.expires_on }])),
             ...(puedeFijar ? { expires_on: fijar ? datos.expires_on : '' } : {}),
         }));
 
@@ -210,6 +215,48 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
                         )}
                     </div>
                 )}
+
+                <fieldset className="flex flex-col gap-2">
+                    <legend className="text-sm font-medium text-texto">
+                        Ligas de invitación <span className="font-normal text-tenue">(opcional)</span>
+                    </legend>
+                    <p className="text-[13px] leading-snug text-tenue">Una por espacio. Cada cliente que agregues toma la liga de su espacio; si una caduca, pega aquí la nueva.</p>
+                    {form.data.invite_links.map((liga, i) => {
+                        const ocupado = cuenta?.espacios.find((e) => e.position === i + 1);
+                        const errores = form.errors as Record<string, string | undefined>;
+                        return (
+                            <div key={i} className="grid grid-cols-[4.5rem_1fr] items-start gap-2 sm:grid-cols-[4.5rem_1fr_9.5rem]">
+                                <span className="pt-2.5 text-[13px] text-suave">
+                                    Espacio {i + 1}
+                                    {ocupado && <span className="block truncate text-[11px] text-tenue" title={ocupado.client_email}>{ocupado.client_email}</span>}
+                                </span>
+                                <Campo
+                                    etiqueta={`Liga del espacio ${i + 1}`}
+                                    ocultarEtiqueta
+                                    type="url"
+                                    inputMode="url"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    placeholder="https://families.google.com/join/…"
+                                    maxLength={500}
+                                    value={liga.url}
+                                    onChange={(evento) => form.setData('invite_links', form.data.invite_links.map((l, j) => (j === i ? { ...l, url: evento.target.value } : l)))}
+                                    error={errores[`invite_links.${i + 1}.url`]}
+                                />
+                                <Campo
+                                    etiqueta={`Caducidad de la liga del espacio ${i + 1}`}
+                                    ocultarEtiqueta
+                                    type="date"
+                                    disabled={liga.url.trim() === ''}
+                                    value={liga.expires_on}
+                                    onChange={(evento) => form.setData('invite_links', form.data.invite_links.map((l, j) => (j === i ? { ...l, expires_on: evento.target.value } : l)))}
+                                    error={errores[`invite_links.${i + 1}.expires_on`]}
+                                    claseContenedor="col-start-2 sm:col-start-auto"
+                                />
+                            </div>
+                        );
+                    })}
+                </fieldset>
 
                 <CampoArea
                     etiqueta="Notas"
