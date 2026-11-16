@@ -43,10 +43,10 @@ export const Copiable = memo(function Copiable({ texto, etiqueta, children, icon
         <button
             type="button"
             onClick={copiar}
-            title={`Copiar ${etiqueta}`}
-            aria-label={`Copiar ${etiqueta}: ${texto}`}
+            title={`Copiar ${texto}`}
+            aria-label={`${texto}, copiar ${etiqueta}`}
             className={cn(
-                'group/copiar -mx-1 inline-flex max-w-[calc(100%+0.5rem)] min-w-0 items-center gap-1.5 rounded-md px-1 text-left transition-colors duration-150 hover:bg-superficie-3',
+                'group/copiar -mx-1 inline-flex max-w-[calc(100%+0.5rem)] min-w-0 items-center gap-1.5 rounded-md px-1 text-left transition-colors duration-150 hover:bg-superficie-3 pointer-coarse:min-h-10',
                 copiado && 'text-acento!',
                 className,
             )}

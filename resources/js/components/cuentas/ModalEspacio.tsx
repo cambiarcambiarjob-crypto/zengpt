@@ -107,7 +107,7 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                 </>
             }
         >
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-5">
                 <Campo
                     etiqueta="Gmail del cliente"
                     type="email"
@@ -121,7 +121,7 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                     value={form.data.client_email}
                     onChange={(evento) => form.setData('client_email', evento.target.value)}
                     error={form.errors.client_email}
-                    claseContenedor="sm:col-span-2"
+                    claseContenedor="sm:col-span-3"
                 />
 
                 <Campo
@@ -136,18 +136,10 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                     value={form.data.client_phone}
                     onChange={(evento) => form.setData('client_phone', evento.target.value)}
                     error={form.errors.client_phone}
+                    claseContenedor="sm:col-span-2"
                 />
 
-                <Campo
-                    etiqueta="Fecha de venta"
-                    type="date"
-                    max={negocio.hoy}
-                    value={form.data.sold_on}
-                    onChange={(evento) => form.setData('sold_on', evento.target.value)}
-                    error={form.errors.sold_on}
-                />
-
-                <SelectorPrecio valor={form.data.price} alCambiar={(valor) => form.setData('price', valor)} precios={negocio.precios} error={form.errors.price} className="sm:col-span-2" />
+                <SelectorPrecio valor={form.data.price} alCambiar={(valor) => form.setData('price', valor)} precios={negocio.precios} error={form.errors.price} className="sm:col-span-5" />
 
                 <Selector
                     etiqueta="Vendedor"
@@ -157,6 +149,17 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                     marcador="Elige un vendedor…"
                     error={form.errors.seller_id}
                     ayuda={editando ? undefined : 'Se recuerda el último que usaste.'}
+                    claseContenedor="sm:col-span-3"
+                />
+
+                {/* La fecha va al final: casi siempre es hoy y así no estorba al tabular. */}
+                <Campo
+                    etiqueta="Fecha de venta"
+                    type="date"
+                    max={negocio.hoy}
+                    value={form.data.sold_on}
+                    onChange={(evento) => form.setData('sold_on', evento.target.value)}
+                    error={form.errors.sold_on}
                     claseContenedor="sm:col-span-2"
                 />
             </div>

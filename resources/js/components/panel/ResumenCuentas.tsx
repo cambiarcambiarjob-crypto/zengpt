@@ -13,7 +13,6 @@ interface Dato {
     clave: string;
     etiqueta: string;
     valor: number;
-    detalle: string;
     href: string;
     tono?: 'acento' | 'peligro';
 }
@@ -37,17 +36,16 @@ export function ResumenCuentas({ cuentas, className }: { cuentas: DashboardProps
     }, []);
 
     const datos: Dato[] = [
-        { clave: 'activas', etiqueta: 'Cuentas activas', valor: cuentas.activas, detalle: 'vigentes hoy', href: '/cuentas?estado=activas' },
-        { clave: 'libres', etiqueta: 'Espacios libres', valor: cuentas.espacios_libres, detalle: 'listos para vender', href: '/cuentas?estado=con_espacio', tono: cuentas.espacios_libres > 0 ? 'acento' : undefined },
-        { clave: 'clientes', etiqueta: 'Clientes totales', valor: cuentas.clientes, detalle: 'en todas las cuentas', href: '/cuentas?estado=todas' },
-        { clave: 'vencidas', etiqueta: 'Cuentas vencidas', valor: cuentas.vencidas, detalle: cuentas.vencidas > 0 ? 'ya sin vigencia' : 'ninguna por ahora', href: '/cuentas?estado=vencidas', tono: cuentas.vencidas > 0 ? 'peligro' : undefined },
+        { clave: 'activas', etiqueta: 'Cuentas activas', valor: cuentas.activas, href: '/cuentas?estado=activas' },
+        { clave: 'libres', etiqueta: 'Espacios libres', valor: cuentas.espacios_libres, href: '/cuentas?estado=con_espacio', tono: cuentas.espacios_libres > 0 ? 'acento' : undefined },
+        { clave: 'clientes', etiqueta: 'Clientes totales', valor: cuentas.clientes, href: '/cuentas?estado=todas' },
+        { clave: 'vencidas', etiqueta: 'Cuentas vencidas', valor: cuentas.vencidas, href: '/cuentas?estado=vencidas', tono: cuentas.vencidas > 0 ? 'peligro' : undefined },
     ];
 
     return (
         <Tarjeta
             className={cn('flex flex-col', className)}
             titulo="Cuentas"
-            descripcion="Vigencia y ocupación de los espacios"
             acciones={
                 <EnlaceBoton href="/cuentas" tamano="sm" iconoFinal={<ArrowRight className="size-4" aria-hidden="true" />}>
                     Ver cuentas
@@ -90,21 +88,20 @@ export function ResumenCuentas({ cuentas, className }: { cuentas: DashboardProps
                 </div>
             </div>
 
-            <ul className="mt-auto grid grid-cols-2 gap-2 pt-5 sm:grid-cols-4">
+            <ul className="mt-auto grid grid-cols-2 gap-2 pt-5 sm:grid-cols-4 xl:grid-cols-2">
                 {datos.map((dato) => (
                     <li key={dato.clave} className="min-w-0">
                         <Link
                             href={dato.href}
-                            className="group flex h-full flex-col rounded-campo border border-borde bg-superficie-2/60 px-3.5 py-3 transition-colors duration-150 hover:border-borde-fuerte hover:bg-superficie-2"
+                            className="flex h-full flex-col rounded-campo border border-borde bg-superficie-2/60 px-3.5 py-3 transition-colors duration-150 hover:border-borde-fuerte hover:bg-superficie-2"
                         >
-                            <span className="text-xs font-medium text-suave">{dato.etiqueta}</span>
-                            <span className={cn('cifras mt-1 font-titulo text-2xl leading-tight font-semibold', dato.tono === 'acento' ? 'text-acento' : dato.tono === 'peligro' ? 'text-peligro' : 'text-texto')}>
+                            <span className={cn('cifras font-titulo text-2xl leading-tight font-semibold', dato.tono === 'acento' ? 'text-acento' : dato.tono === 'peligro' ? 'text-peligro' : 'text-texto')}>
                                 <span className="sr-only">{numero(dato.valor)}</span>
                                 <span aria-hidden="true">
                                     <CountUp to={dato.valor} from={0} duration={0.9} easing="expo" separator="," />
                                 </span>
                             </span>
-                            <span className="mt-0.5 text-xs text-tenue">{dato.detalle}</span>
+                            <span className="mt-1 text-xs leading-snug font-medium text-suave">{dato.etiqueta}</span>
                         </Link>
                     </li>
                 ))}

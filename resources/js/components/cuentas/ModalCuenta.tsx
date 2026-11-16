@@ -5,7 +5,7 @@ import { Boton } from '@/components/ui/Boton';
 import { Campo, CampoArea } from '@/components/ui/Campo';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
-import { diasEntre, fechaMedia, plural } from '@/lib/formato';
+import { diasEnPalabras, diasEntre, fechaMedia, plural } from '@/lib/formato';
 import { usePagina } from '@/lib/pagina';
 import type { Compartido, Cuenta } from '@/types';
 import { esFechaIso, sumarMeses } from './utilidades';
@@ -119,15 +119,11 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
                     {/* Altura fija: el texto cambia al mover la fecha, la ventana no «brinca». */}
                     <p className="flex min-h-10 items-center gap-2.5 rounded-campo border border-borde bg-superficie-2/60 px-3 py-2 text-[13px] leading-snug text-suave" aria-live="polite">
                         <CalendarClock className="size-4 shrink-0 text-acento" aria-hidden="true" />
-                        {venceEl ? (
+                        {venceEl && diasVigencia !== null ? (
                             <span>
-                                Vence el <strong className="font-semibold text-texto">{fechaMedia(venceEl)}</strong>
-                                {diasVigencia !== null && (
-                                    <span className={cn(diasVigencia < 0 ? 'text-peligro' : 'text-tenue')}>
-                                        {' · '}
-                                        {diasVigencia < 0 ? `venció hace ${plural(-diasVigencia, 'día')}` : diasVigencia === 0 ? 'vence hoy' : `${plural(diasVigencia, 'día')} a partir de hoy`}
-                                    </span>
-                                )}
+                                {diasVigencia < 0 ? 'Venció el ' : 'Vence el '}
+                                <strong className="font-semibold text-texto">{fechaMedia(venceEl)}</strong>
+                                <span className={cn(diasVigencia < 0 ? 'text-peligro' : 'text-tenue')}> · {diasEnPalabras(diasVigencia)}</span>
                             </span>
                         ) : (
                             <span>Elige la fecha de inicio para calcular el vencimiento.</span>
@@ -147,10 +143,11 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
 
                 {puedeFijar && (
                     <div className="flex flex-col gap-3 rounded-campo border border-borde p-3">
-                        <label htmlFor={idFijar} className="flex cursor-pointer items-start gap-2.5 text-sm text-texto">
+                        <div className="flex items-start gap-2.5">
                             <input
                                 id={idFijar}
                                 type="checkbox"
+                                aria-describedby={`${idFijar}-ayuda`}
                                 className="mt-0.5 size-4 shrink-0 cursor-pointer accent-acento"
                                 checked={fijar}
                                 onChange={(evento) => {
@@ -159,11 +156,15 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
                                     if (!evento.target.checked) form.clearErrors('expires_on');
                                 }}
                             />
-                            <span>
-                                Fijar otra fecha de vencimiento
-                                <span className="block text-[13px] text-tenue">Solo el administrador. Si no, vence a los {plural(negocio.meses_cuenta, 'mes', 'meses')} del inicio.</span>
-                            </span>
-                        </label>
+                            <div className="min-w-0">
+                                <label htmlFor={idFijar} className="cursor-pointer text-sm text-texto">
+                                    Fijar otra fecha de vencimiento
+                                </label>
+                                <p id={`${idFijar}-ayuda`} className="text-[13px] leading-snug text-tenue">
+                                    Solo el administrador. Si no, vence a los {plural(negocio.meses_cuenta, 'mes', 'meses')} del inicio.
+                                </p>
+                            </div>
+                        </div>
                         {fijar && (
                             <Campo
                                 etiqueta="Fecha de vencimiento"

@@ -37,7 +37,8 @@ function escalaLegible(minimo: number, maximo: number): Escala {
     const potencia = 10 ** Math.floor(Math.log10(bruto));
     const paso = [1, 2, 2.5, 5, 10].map((multiplo) => multiplo * potencia).find((candidato) => candidato >= bruto) ?? 10 * potencia;
     const desde = Math.floor(min / paso) * paso;
-    const hasta = Math.max(Math.ceil(max / paso) * paso, desde + paso);
+    // Sin ningún movimiento se dibuja una rejilla de referencia (0 a 1,000) en lugar de un eje vacío.
+    const hasta = min === 0 && max === 0 ? paso * 4 : Math.max(Math.ceil(max / paso) * paso, desde + paso);
     const marcas: number[] = [];
 
     for (let marca = desde; marca <= hasta + paso / 2; marca += paso) marcas.push(Math.round(marca * 100));
@@ -315,15 +316,14 @@ export function GraficaSerie({ serie, hoy, className }: GraficaSerieProps) {
                                         : Math.max(dibujo.centro(activo) - dibujo.paso / 2 - 10 - ANCHO_AVISO, 0),
                             }}
                         >
-                            <p className="text-xs font-medium text-suave">{capitalizar(fechaLarga(diaActivo.fecha))}</p>
+                            <p className="text-xs font-medium text-texto">{diaActivo.fecha === hoy ? `Hoy, ${fechaCorta(diaActivo.fecha, { anio: false })}` : capitalizar(fechaLarga(diaActivo.fecha))}</p>
+                            <p className="text-xs text-tenue">{diaActivo.ventas_count === 0 ? 'Sin ventas' : plural(diaActivo.ventas_count, 'venta')}</p>
                             <dl className="mt-1.5 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 text-[13px]">
                                 <dt className="flex items-center gap-1.5 text-suave">
                                     <span className="h-0.5 w-3 rounded-full" style={{ backgroundColor: COLOR.ventas }} aria-hidden="true" />
                                     Ventas
                                 </dt>
-                                <dd className="cifras text-right font-semibold text-texto">
-                                    {dinero(diaActivo.ventas)} <span className="font-normal text-tenue">· {numero(diaActivo.ventas_count)}</span>
-                                </dd>
+                                <dd className="cifras text-right font-semibold text-texto">{dinero(diaActivo.ventas)}</dd>
                                 <dt className="flex items-center gap-1.5 text-suave">
                                     <span className="h-0.5 w-3 rounded-full" style={{ backgroundColor: COLOR.publicidad }} aria-hidden="true" />
                                     Publicidad

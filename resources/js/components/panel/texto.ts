@@ -2,3 +2,8 @@
 export function capitalizar(texto: string): string {
     return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
+
+/** «10 %» con espacio duro: el número y el signo nunca quedan en renglones distintos. */
+export function porciento(valor: number): string {
+    return `${valor}\u00a0%`;
+}

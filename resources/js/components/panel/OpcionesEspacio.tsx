@@ -46,7 +46,7 @@ export function OpcionesEspacio({ cuentas, className }: { cuentas: Cuenta[]; cla
                     compacto
                     icono={<Layers className="size-5" />}
                     titulo="No hay espacios libres"
-                    descripcion="Todas las cuentas vigentes están llenas: da de alta una cuenta para seguir vendiendo."
+                    descripcion="Ninguna cuenta vigente tiene lugar para otro cliente: da de alta una cuenta para seguir vendiendo."
                     accion={
                         <Magnet padding={36} magnetStrength={4}>
                             <EnlaceBoton href="/cuentas" variante="primario" icono={<Plus className="size-4" aria-hidden="true" />}>
@@ -67,14 +67,15 @@ export function OpcionesEspacio({ cuentas, className }: { cuentas: Cuenta[]; cla
                                 >
                                     <span className="min-w-0 flex-1">
                                         <span className="block truncate text-sm font-medium text-texto">{cuenta.email}</span>
-                                        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                        <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs sm:mt-0.5">
+                                            {/* Celular: la barra baja al segundo renglón para que el Gmail se lea completo. */}
+                                            <BarraEspacios ocupados={cuenta.ocupados} capacidad={cuenta.capacidad} tamano="sm" conTexto className="sm:hidden" />
                                             <span className={cuenta.por_vencer ? 'font-medium text-alerta' : 'text-tenue'}>{capitalizar(diasRestantes(cuenta.dias_restantes))}</span>
                                             <span className="text-tenue max-sm:hidden" aria-hidden="true">
                                                 · {fechaCorta(cuenta.expires_on)}
                                             </span>
                                         </span>
                                     </span>
-                                    <BarraEspacios ocupados={cuenta.ocupados} capacidad={cuenta.capacidad} tamano="sm" className="sm:hidden" />
                                     <BarraEspacios ocupados={cuenta.ocupados} capacidad={cuenta.capacidad} conTexto className="max-sm:hidden" />
                                     <Insignia estado="libre" sinPunto className="cifras min-w-[4.25rem] justify-center">
                                         {plural(cuenta.libres, 'libre')}

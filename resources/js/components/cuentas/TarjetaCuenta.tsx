@@ -4,7 +4,7 @@ import { BarraEspacios } from '@/components/ui/BarraEspacios';
 import { Boton } from '@/components/ui/Boton';
 import { estadoDeCuenta, Insignia } from '@/components/ui/Insignia';
 import { cn } from '@/lib/cn';
-import { diasEnPalabras, dinero, fechaCorta } from '@/lib/formato';
+import { diasEnPalabras, diasEntre, dinero, fechaCorta } from '@/lib/formato';
 import type { Cuenta, Espacio } from '@/types';
 import { CasillaLibre, CasillaOcupada } from './CasillaEspacio';
 import { Copiable } from './Copiable';
@@ -37,6 +37,9 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
     // Si algún espacio trae una posición fuera de 1…capacidad, igual se muestra (al final).
     const fuera = cuenta.espacios.filter((espacio) => espacio.position < 1 || espacio.position > cuenta.capacidad);
     const tituloId = `cuenta-${cuenta.id}-titulo`;
+    // Días de calendario entre «hoy» del negocio y el vencimiento, con las dos fechas que manda el servidor
+    // (fechas puras: no dependen de la hora ni de la zona horaria).
+    const dias = diasEntre(hoy, cuenta.expires_on);
 
     return (
         <article
@@ -44,7 +47,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
             tabIndex={-1}
             aria-labelledby={tituloId}
             className={cn(
-                '@container rounded-tarjeta border bg-superficie shadow-tarjeta outline-none [contain-intrinsic-size:auto_15rem] [content-visibility:auto] focus-visible:border-acento/60',
+                '@container rounded-tarjeta border bg-superficie shadow-tarjeta outline-none focus-visible:border-acento/60',
                 BORDE[estado],
             )}
         >
@@ -52,7 +55,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                 <div className="min-w-0 flex-1 basis-64">
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                         <h2 id={tituloId} className="flex max-w-full min-w-0 font-sans text-base leading-snug font-semibold tracking-normal text-texto">
-                            <Copiable texto={cuenta.email} etiqueta="Gmail de la cuenta" className="py-0.5 pointer-coarse:py-1.5" />
+                            <Copiable texto={cuenta.email} etiqueta="Gmail de la cuenta" className="py-0.5" />
                         </h2>
                         <Insignia estado={estado} />
                     </div>
@@ -62,7 +65,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                             {fechaCorta(cuenta.expires_on)}
                         </time>
                         <span aria-hidden="true"> · </span>
-                        <span className={cn('font-medium', TONO_DIAS[estado])}>{diasEnPalabras(cuenta.dias_restantes)}</span>
+                        <span className={cn('font-medium', TONO_DIAS[estado])}>{diasEnPalabras(dias)}</span>
                     </p>
                     {cuenta.notes && (
                         <p className="mt-2 flex max-w-2xl items-start gap-1.5 text-[13px] leading-snug text-suave">
@@ -100,7 +103,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                 </div>
             </header>
 
-            <ul aria-label={`Espacios de ${cuenta.email}`} className="grid grid-flow-row-dense grid-cols-2 gap-2.5 p-4 @min-[36rem]:grid-cols-3 @min-[60rem]:grid-cols-5 sm:p-5 sm:pt-4">
+            <ul aria-label={`Espacios de ${cuenta.email}`} className="grid grid-flow-row-dense grid-cols-2 gap-2.5 p-4 @min-[36rem]:grid-cols-3 @min-[56rem]:grid-cols-5 sm:p-5 sm:pt-4">
                 {Array.from({ length: cuenta.capacidad }, (_, indice) => {
                     const espacio = porPosicion.get(indice + 1);
 

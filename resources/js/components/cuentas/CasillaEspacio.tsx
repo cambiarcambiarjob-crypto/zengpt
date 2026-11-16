@@ -6,7 +6,7 @@ import type { Cuenta, Espacio } from '@/types';
 import { Copiable } from './Copiable';
 
 // Las casillas viven en la rejilla de TarjetaCuenta (un contenedor `@container`): angosta = 2 columnas (la ocupada usa las 2),
-// mediana = 3 y ancha = los 5 espacios en fila.
+// mediana (≥ 36rem) = 3 y ancha (≥ 56rem) = los 5 espacios en fila.
 const BOTON_ICONO =
     'flex size-7 shrink-0 items-center justify-center rounded-md text-tenue transition-colors duration-150 hover:bg-superficie-3 hover:text-texto pointer-coarse:size-10';
 
@@ -25,7 +25,7 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
     return (
         <li
             className={cn(
-                'col-span-2 flex min-w-0 flex-col rounded-campo border p-3 transition-colors duration-200 @min-[36rem]:col-span-1',
+                'col-span-2 flex min-w-0 flex-col rounded-campo border p-3 pointer-coarse:py-2 transition-colors duration-200 @min-[36rem]:col-span-1',
                 resaltada ? 'border-acento/60 bg-acento/8' : 'border-borde bg-superficie-2/60',
             )}
         >
@@ -53,24 +53,27 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
                 </div>
             </div>
 
-            <div className="mt-2 flex min-w-0 flex-col items-start gap-0.5">
-                <Copiable texto={espacio.client_email} etiqueta="Gmail del cliente" className="py-0.5 text-[13px] font-medium text-texto pointer-coarse:py-2" />
+            <div className="mt-2 flex min-w-0">
+                <Copiable texto={espacio.client_email} etiqueta="Gmail del cliente" className="py-0.5 text-[13px] font-medium text-texto" />
+            </div>
+
+            {/* Angosta (celular): teléfono y venta en un mismo renglón. Con más ancho, uno bajo el otro y la venta al pie. */}
+            <div className="mt-auto flex min-w-0 items-center justify-between gap-x-3 @min-[36rem]:flex-col @min-[36rem]:items-start @min-[36rem]:justify-start">
                 {espacio.client_phone && (
                     <Copiable
                         texto={espacio.client_phone}
                         etiqueta="teléfono del cliente"
                         icono={<Phone className="size-3" />}
-                        className="cifras py-0.5 text-xs text-suave pointer-coarse:py-2"
+                        className="cifras py-0.5 text-xs text-suave"
                     />
                 )}
+                <p className="min-w-0 truncate py-0.5 text-xs text-tenue @min-[36rem]:max-w-full @min-[36rem]:pt-2">
+                    <span className="text-suave">{espacio.seller_name ?? 'Sin vendedor'}</span>
+                    <span aria-hidden="true"> · </span>
+                    <span className="sr-only">, vendido </span>
+                    <time dateTime={espacio.sold_on}>{fechaRelativa(espacio.sold_on, hoy)}</time>
+                </p>
             </div>
-
-            <p className="mt-auto truncate pt-2 text-xs text-tenue">
-                <span className="text-suave">{espacio.seller_name ?? 'Sin vendedor'}</span>
-                <span aria-hidden="true"> · </span>
-                <span className="sr-only">, vendido </span>
-                <time dateTime={espacio.sold_on}>{fechaRelativa(espacio.sold_on, hoy)}</time>
-            </p>
         </li>
     );
 });
@@ -86,7 +89,7 @@ export interface CasillaLibreProps {
 export const CasillaLibre = memo(function CasillaLibre({ cuenta, disponible, alAgregar }: CasillaLibreProps) {
     if (!disponible) {
         return (
-            <li className="flex min-h-14 min-w-0 items-center justify-center rounded-campo border border-dashed border-borde px-3 text-[13px] text-tenue @min-[36rem]:min-h-22">
+            <li className="flex min-h-14 min-w-0 items-center justify-center rounded-campo border border-dashed border-borde px-3 text-[13px] text-tenue @min-[36rem]:min-h-18">
                 Sin cliente
             </li>
         );
@@ -101,7 +104,7 @@ export const CasillaLibre = memo(function CasillaLibre({ cuenta, disponible, alA
                 aria-label={`Agregar cliente a ${cuenta.email}`}
                 className={cn(
                     'group/libre flex h-full min-h-14 w-full items-center justify-center gap-2 rounded-campo border border-dashed border-acento/35 bg-acento/3 px-3 text-[13px] font-medium text-acento',
-                    'transition-[background-color,border-color,transform] duration-150 hover:border-acento/80 hover:bg-acento/10 active:scale-[0.98] @min-[36rem]:min-h-22 @min-[36rem]:flex-col @min-[36rem]:gap-1.5',
+                    'transition-[background-color,border-color,transform] duration-150 hover:border-acento/80 hover:bg-acento/10 active:scale-[0.98] @min-[36rem]:min-h-18 @min-[36rem]:flex-col @min-[36rem]:gap-1.5',
                 )}
             >
                 <span className="flex size-6 items-center justify-center rounded-full bg-acento/12 transition-transform duration-200 ease-suave group-hover/libre:scale-110 group-hover/libre:bg-acento/20" aria-hidden="true">
