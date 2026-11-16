@@ -37,9 +37,25 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
                         <span className="sr-only">Espacio </span>
                         {espacio.position}
                     </span>
-                    <span className={cn('cifras truncate text-[15px] leading-none font-semibold', espacio.paid_on ? 'text-texto' : 'text-alerta')}>{dinero(espacio.price_cents)}</span>
+                    <span className="cifras truncate text-[15px] leading-none font-semibold text-texto">{dinero(espacio.price_cents)}</span>
+                    {!espacio.paid_on && (
+                        <span className="shrink-0 rounded-[4px] bg-alerta/12 px-1.5 py-0.5 text-[10px] leading-none font-semibold tracking-wide text-alerta uppercase" title="Aún no paga: no cuenta en ventas ni ganancias">
+                            Por cobrar
+                        </span>
+                    )}
                 </p>
                 <div className="-my-1 -mr-1.5 flex shrink-0 items-center">
+                    {!espacio.paid_on && (
+                        <button
+                            type="button"
+                            className={cn(BOTON_ICONO, 'text-alerta! hover:bg-exito/12! hover:text-exito!')}
+                            onClick={() => router.put(`/espacios/${espacio.id}/pago`, { pagado: true }, { preserveScroll: true, preserveState: true })}
+                            title="Marcar pagado (hoy)"
+                            aria-label={`Marcar pagado a ${espacio.client_email}`}
+                        >
+                            <BadgeCheck className="size-3.5" aria-hidden="true" />
+                        </button>
+                    )}
                     <button type="button" className={BOTON_ICONO} onClick={() => alEditar(cuenta, espacio)} title="Editar cliente" aria-label={`Editar cliente ${espacio.client_email}`}>
                         <Pencil className="size-3.5" aria-hidden="true" />
                     </button>
@@ -59,18 +75,7 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
                 <Copiable texto={espacio.client_email} etiqueta="Gmail del cliente" className="py-0.5 text-[13px] font-medium text-texto" />
             </div>
 
-            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-                {!espacio.paid_on && (
-                    <button
-                        type="button"
-                        onClick={() => router.put(`/espacios/${espacio.id}/pago`, { pagado: true }, { preserveScroll: true, preserveState: true })}
-                        className="inline-flex h-6 items-center gap-1.5 rounded-full border border-alerta/40 bg-alerta/10 px-2.5 text-[11px] font-medium whitespace-nowrap text-alerta transition-colors hover:bg-alerta/20"
-                        title="El cliente aún no paga: no cuenta en ventas ni ganancias. Clic para registrar el pago (hoy)."
-                    >
-                        <BadgeCheck className="size-3" aria-hidden="true" />
-                        Por cobrar · Marcar pagado
-                    </button>
-                )}
+            <div className="mt-1.5 flex min-w-0">
                 <InvitacionEspacio espacio={espacio} />
             </div>
 
