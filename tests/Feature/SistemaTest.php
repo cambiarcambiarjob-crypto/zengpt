@@ -221,4 +221,27 @@ class SistemaTest extends TestCase
 
         $this->actingAs($this->socio)->post('/cuentas', ['email' => 'otra@gmail.com', 'twofa_url' => 'no-es-una-liga', 'started_on' => Hoy::fecha()])->assertSessionHasErrors('twofa_url');
     }
+
+    public function test_invitacion_al_grupo_familiar_por_cliente(): void
+    {
+        $cuenta = $this->cuenta();
+        $slot = Slot::query()->create(['account_id' => $cuenta->id, 'position' => 1, 'client_email' => 'c@gmail.com', 'price_cents' => 20000, 'seller_id' => $this->vendedor('Jorge')->id, 'sold_on' => Hoy::fecha()]);
+        $this->assertSame('sin_liga', $slot->inviteStatus());
+
+        $vence = Hoy::carbon()->addDays(7)->toDateString();
+        $this->actingAs($this->socio)->put("/espacios/{$slot->id}/invitacion", ['invite_url' => 'https://families.example/join/abc', 'invite_expires_on' => $vence])->assertSessionHasNoErrors();
+        $this->assertSame('lista', $slot->fresh()->inviteStatus());
+
+        $this->actingAs($this->socio)->put("/espacios/{$slot->id}/invitacion", ['accion' => 'enviada']);
+        $this->assertSame('enviada', $slot->fresh()->inviteStatus());
+        $this->actingAs($this->socio)->put("/espacios/{$slot->id}/invitacion", ['accion' => 'aceptada']);
+        $this->assertSame('aceptada', $slot->fresh()->inviteStatus());
+
+        // Una liga nueva reinicia el estado; una liga vencida sin aceptar sale como caducada.
+        $this->actingAs($this->socio)->put("/espacios/{$slot->id}/invitacion", ['invite_url' => 'https://families.example/join/xyz', 'invite_expires_on' => Hoy::carbon()->subDay()->toDateString()]);
+        $this->assertSame('caducada', $slot->fresh()->inviteStatus());
+
+        $this->actingAs($this->socio)->get('/cuentas')->assertInertia(fn (Assert $page) => $page->where('cuentas.0.espacios.0.invite_status', 'caducada'));
+        $this->actingAs($this->socio)->put("/espacios/{$slot->id}/invitacion", ['invite_url' => 'no-es-liga'])->assertSessionHasErrors('invite_url');
+    }
 }

@@ -46,6 +46,43 @@ class SlotController extends Controller
         return back()->with('success', 'Espacio actualizado.');
     }
 
+    /**
+     * Liga de invitación al grupo familiar (una por cliente). Guardar una liga nueva reinicia el estado;
+     * `accion` marca la invitación como enviada o aceptada (o la reinicia).
+     */
+    public function invitacion(Request $request, Slot $slot): RedirectResponse
+    {
+        $data = $request->validate([
+            'invite_url' => ['nullable', 'url:https,http', 'max:500'],
+            'invite_expires_on' => ['nullable', 'date_format:Y-m-d'],
+            'accion' => ['nullable', 'in:enviada,aceptada,reiniciar'],
+        ], [], ['invite_url' => 'liga de invitación', 'invite_expires_on' => 'fecha de caducidad']);
+
+        if (array_key_exists('invite_url', $data) && $request->has('invite_url')) {
+            $nueva = filled($data['invite_url']) ? trim($data['invite_url']) : null;
+            $cambio = $nueva !== $slot->invite_url;
+            $slot->fill([
+                'invite_url' => $nueva,
+                'invite_expires_on' => $nueva !== null ? ($data['invite_expires_on'] ?? null) : null,
+            ]);
+            if ($cambio) {
+                $slot->invite_sent_at = null;
+                $slot->invite_accepted_at = null;
+            }
+        }
+
+        match ($data['accion'] ?? null) {
+            'enviada' => $slot->invite_sent_at = now(),
+            'aceptada' => $slot->fill(['invite_accepted_at' => now(), 'invite_sent_at' => $slot->invite_sent_at ?? now()]),
+            'reiniciar' => $slot->fill(['invite_sent_at' => null, 'invite_accepted_at' => null]),
+            default => null,
+        };
+
+        $slot->save();
+
+        return back()->with('success', 'Invitación actualizada.');
+    }
+
     public function destroy(Slot $slot): RedirectResponse
     {
         $slot->delete();

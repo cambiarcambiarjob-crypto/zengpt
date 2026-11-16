@@ -15,6 +15,8 @@ export interface Espacio {
     id: number; account_id: number; account_email: string | null; position: number;
     client_email: string; client_phone: string | null; price_cents: number;
     seller_id: number; seller_name: string | null; sold_on: string;
+    invite_url: string | null; invite_expires_on: string | null;
+    invite_status: 'sin_liga' | 'lista' | 'enviada' | 'aceptada' | 'caducada';
 }
 
 export interface Cuenta {

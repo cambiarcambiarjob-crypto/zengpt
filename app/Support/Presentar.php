@@ -46,6 +46,9 @@ final class Presentar
             'seller_id' => $slot->seller_id,
             'seller_name' => $slot->seller?->name,
             'sold_on' => $slot->sold_on->toDateString(),
+            'invite_url' => $slot->invite_url,
+            'invite_expires_on' => $slot->invite_expires_on?->toDateString(),
+            'invite_status' => $slot->inviteStatus(),
         ];
     }
 }

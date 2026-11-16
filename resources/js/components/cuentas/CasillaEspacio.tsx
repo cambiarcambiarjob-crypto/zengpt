@@ -4,6 +4,7 @@ import { cn } from '@/lib/cn';
 import { dinero, fechaRelativa } from '@/lib/formato';
 import type { Cuenta, Espacio } from '@/types';
 import { Copiable } from './Copiable';
+import { InvitacionEspacio } from './InvitacionEspacio';
 
 // Las casillas viven en la rejilla de TarjetaCuenta (un contenedor `@container`): angosta = 2 columnas (la ocupada usa las 2),
 // mediana (≥ 36rem) = 3 y ancha (≥ 56rem) = los 5 espacios en fila.
@@ -55,6 +56,10 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
 
             <div className="mt-2 flex min-w-0">
                 <Copiable texto={espacio.client_email} etiqueta="Gmail del cliente" className="py-0.5 text-[13px] font-medium text-texto" />
+            </div>
+
+            <div className="mt-1.5 flex min-w-0">
+                <InvitacionEspacio espacio={espacio} />
             </div>
 
             {/* Angosta (celular): teléfono y venta en un mismo renglón. Con más ancho, uno bajo el otro y la venta al pie. */}
