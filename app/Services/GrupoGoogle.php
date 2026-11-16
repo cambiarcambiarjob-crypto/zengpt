@@ -125,6 +125,20 @@ class GrupoGoogle
         return $resumen;
     }
 
+    /** Clave base32 del 2FA a partir de la liga guardada (p. ej. https://api2fa.com/CLAVE → CLAVE). */
+    public static function secreto2fa(?string $liga): string
+    {
+        if (blank($liga)) {
+            return '';
+        }
+
+        $ultimo = basename((string) parse_url(trim($liga), PHP_URL_PATH));
+        parse_str((string) parse_url(trim($liga), PHP_URL_QUERY), $query);
+        $candidato = (string) ($query['secret'] ?? $ultimo);
+
+        return preg_match('/^[A-Za-z2-7]{16,}$/', $candidato) === 1 ? strtoupper($candidato) : '';
+    }
+
     private function marcar(Slot $slot, string $estado): void
     {
         $slot->google_status = $estado;
@@ -158,7 +172,12 @@ class GrupoGoogle
 
         try {
             $resultado = Process::timeout($segundos)
-                ->env(['ZENBOT_ADMIN' => mb_strtolower($account->email)])
+                ->env([
+                    'ZENBOT_ADMIN' => mb_strtolower($account->email),
+                    // Por si Google pide «verifica que eres tú»: contraseña y clave 2FA de la cuenta (solo en el entorno del proceso).
+                    'ZENBOT_PASS' => (string) $account->password,
+                    'ZENBOT_TOTP' => self::secreto2fa($account->twofa_url),
+                ])
                 ->run([(string) config('zengpt.google.node', 'node'), (string) config('zengpt.google.script'), ...$argumentos]);
         } finally {
             $lock->release();
@@ -177,6 +196,12 @@ class GrupoGoogle
                 'no_encontrado' => 'Ese cliente no está en el grupo de Google (ni con invitación pendiente).',
                 'sin_lugar' => 'El grupo de Google ya no tiene lugares para invitar.',
                 'no_confirmado' => 'Google no confirmó el cambio. Revisa el grupo y vuelve a intentar.',
+                'lectura_incompleta' => 'Google tardó en cargar el grupo. Intenta de nuevo en un momento.',
+                'falta_contrasena' => 'Google pidió confirmar la contraseña: guárdala en la cuenta (Editar cuenta) y vuelve a intentar.',
+                'falta_2fa' => 'Google pidió el código de 2 pasos: guarda la liga de 2FA en la cuenta y vuelve a intentar.',
+                'verificacion_rechazada' => 'Google rechazó la contraseña o el código 2FA guardados en la cuenta. Revísalos.',
+                'verificacion_distinta' => 'Google pidió otra forma de verificación (teléfono o app). Hay que hacerlo a mano en el servidor.',
+                'verificacion_atorada' => 'Google no aceptó la verificación automática. Intenta de nuevo o hazlo a mano en el servidor.',
                 default => 'Google no respondió como se esperaba. Intenta de nuevo en un momento.',
             });
         }

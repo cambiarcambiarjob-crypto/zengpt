@@ -5,6 +5,7 @@
 //   node familia.cjs invitar CORREO  → {"ok":true,"invitado":"correo"}
 //   node familia.cjs sacar CORREO    → {"ok":true,"sacado":"correo","era":"miembro"|"invitacion"}
 //   errores                          → {"ok":false,"error":"sin_sesion"|"sin_navegador"|"otra_cuenta"|"no_encontrado"|"sin_lugar"|"no_confirmado"|"…"}
+const crypto = require('crypto');
 const { chromium } = require('playwright');
 
 const CDP = process.env.ZENBOT_CDP || 'http://127.0.0.1:9333';
@@ -13,6 +14,63 @@ const CORREO = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 // ZENBOT_ADMIN: correo esperado del administrador; si la sesión es de otra cuenta, no se hace nada.
 const ESPERADO = (process.env.ZENBOT_ADMIN || '').trim().toLowerCase();
 const [accion, objetivo] = [process.argv[2], (process.argv[3] || '').trim().toLowerCase()];
+
+// Para cuando Google pide «verifica que eres tú» (p. ej. al quitar a un miembro): la contraseña de la cuenta y la
+// clave de su 2FA llegan por variables de entorno desde el sistema (nunca por la línea de comandos).
+const CLAVE = process.env.ZENBOT_PASS || '';
+const SECRETO_2FA = (process.env.ZENBOT_TOTP || '').replace(/[^A-Za-z2-7]/g, '').toUpperCase();
+
+/** Código de 6 dígitos (TOTP, RFC 6238, 30 s) a partir de la clave base32: lo mismo que una app autenticadora. */
+function codigo2fa(secreto, desfase = 0) {
+    const alfabeto = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = '';
+    for (const c of secreto) bits += alfabeto.indexOf(c).toString(2).padStart(5, '0');
+    const clave = Buffer.from(bits.match(/.{8}/g).map((b) => parseInt(b, 2)));
+    const contador = Buffer.alloc(8);
+    contador.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000) + desfase));
+    const h = crypto.createHmac('sha1', clave).update(contador).digest();
+    const o = h[h.length - 1] & 15;
+
+    return String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, '0');
+}
+
+/** Si Google pide confirmar identidad, la completa con la contraseña y el código 2FA. Devuelve al terminar. */
+async function verificarIdentidad(pagina) {
+    for (let intento = 0; intento < 5; intento++) {
+        await pagina.waitForLoadState('domcontentloaded').catch(() => {});
+        const url = pagina.url();
+        if (!url.startsWith('https://accounts.google.com/')) return;
+
+        if (/challenge\/pwd/.test(url)) {
+            if (!CLAVE) throw falla('falta_contrasena');
+            const campo = pagina.locator('input[type=password]').first();
+            await campo.waitFor({ timeout: 15000 });
+            await campo.fill('');
+            await campo.pressSequentially(CLAVE, { delay: 35 });
+            await campo.press('Enter');
+        } else if (/challenge\/totp/.test(url)) {
+            if (!SECRETO_2FA) throw falla('falta_2fa');
+            const campo = pagina.locator('input[type=tel], input[name=totpPin], input#totpPin').first();
+            await campo.waitFor({ timeout: 15000 });
+            await campo.fill('');
+            await campo.pressSequentially(codigo2fa(SECRETO_2FA), { delay: 60 });
+            await campo.press('Enter');
+        } else if (/challenge\/selection|challenge\/ootp|challenge\/az|challenge\/ipp|challenge\/sk/.test(url)) {
+            throw falla('verificacion_distinta');
+        } else if (/signin\/(v2\/)?(identifier|rejected)|deniedsigninrejected/.test(url)) {
+            throw falla('sin_sesion');
+        }
+
+        await pagina.waitForURL((u) => u.toString() !== url, { timeout: 20000 }).catch(() => {});
+        await pagina.waitForTimeout(1500);
+        if (pagina.url() === url) {
+            const texto = (await pagina.innerText('body').catch(() => '')).toLowerCase();
+            throw falla(/incorrect|wrong|erróne|equivocad/.test(texto) ? 'verificacion_rechazada' : 'verificacion_atorada');
+        }
+    }
+
+    if (pagina.url().startsWith('https://accounts.google.com/')) throw falla('verificacion_atorada');
+}
 
 let pestana = null;
 const salir = async (dato, codigo = 0) => {
@@ -47,16 +105,23 @@ async function leer(pagina) {
         }
 
         // Miembro: el correo solo aparece en su propia página (después de «Volver…», no en la cabecera).
-        await abrir(pagina, enlace.href);
-        await pagina.waitForFunction(() => /@/.test(document.body.innerText), null, { timeout: 15000 }).catch(() => {});
-        const cuerpo = await pagina.innerText('body');
-        const correo = (cuerpo.slice(Math.max(0, cuerpo.indexOf('Volver'))).match(CORREO) || [null])[0];
+        let correo = null;
+        for (let intento = 0; intento < 2 && !correo; intento++) {
+            await abrir(pagina, enlace.href);
+            await pagina
+                .waitForFunction(() => { const t = document.body.innerText; const i = t.indexOf('Volver'); return i >= 0 && /@/.test(t.slice(i)); }, null, { timeout: 25000 })
+                .catch(() => {});
+            const cuerpo = await pagina.innerText('body');
+            correo = (cuerpo.slice(Math.max(0, cuerpo.indexOf('Volver'))).match(CORREO) || [null])[0];
+        }
+        if (!correo && /Administrador(a)? familiar/i.test(enlace.texto)) throw falla('lectura_incompleta');
         const esAdmin = /Administrador(a)? familiar/i.test(enlace.texto);
         if (!correo) continue;
         if (esAdmin) admin = correo.toLowerCase();
         miembros.push({ email: correo.toLowerCase(), nombre: enlace.texto.replace(/Administrador(a)? familiar|Miembro/gi, '').trim(), admin: esAdmin, href: enlace.href });
     }
 
+    if (!admin) throw falla('lectura_incompleta');
     if (ESPERADO && admin !== ESPERADO) throw falla('otra_cuenta');
 
     return { admin, miembros, invitaciones, quedan: quedan === null ? null : Number(quedan) };
@@ -84,6 +149,19 @@ async function invitar(pagina, correo) {
     return { ok: true, invitado: correo };
 }
 
+/** Confirma la baja: un diálogo «¿Cancelar invitación?» o la página family/remove de Google. `soloVer` no confirma. */
+async function confirmarQuitar(pagina, soloVer) {
+    const dialogo = pagina.locator('[role=dialog], [role=alertdialog]').last();
+    if (await dialogo.isVisible().catch(() => false)) {
+        if (!soloVer) await dialogo.getByRole('button', { name: /^(Sí|Retirar|Quitar|Eliminar|Confirmar)$/i }).first().click();
+        return;
+    }
+    if (!pagina.url().startsWith(BASE)) throw falla('sin_sesion');
+    await pagina.waitForSelector('button', { timeout: 15000 });
+    if (soloVer) return;
+    await pagina.getByRole('button', { name: /^(Retirar|Quitar|Quitar miembro|Eliminar|Confirmar|Sí)$/i }).last().click({ timeout: 10000 });
+}
+
 async function sacar(pagina, correo) {
     const grupo = await leer(pagina);
     const invitacion = grupo.invitaciones.find((i) => i.email === correo);
@@ -92,11 +170,11 @@ async function sacar(pagina, correo) {
     if (!destino) throw falla('no_encontrado');
 
     await abrir(pagina, destino.href, 'button');
-    const boton = pagina.getByRole('button', { name: /Cancelar invitación|Quitar (miembro|de la familia)|Eliminar miembro|Quitar/i }).first();
-    await boton.click({ timeout: 10000 });
-    const dialogo = pagina.locator('[role=dialog], [role=alertdialog]').last();
-    await dialogo.waitFor({ timeout: 10000 });
-    await dialogo.getByRole('button', { name: /^(Sí|Quitar|Eliminar|Confirmar)$/i }).first().click();
+    await pagina.getByRole('button', { name: /^(Cancelar invitación|Quitar miembro)$/i }).first().click({ timeout: 10000 });
+    await pagina.waitForTimeout(2500);
+    await verificarIdentidad(pagina);
+    await confirmarQuitar(pagina, accion === 'ver-quitar');
+    if (accion === 'ver-quitar') return { ok: true, vista: (await pagina.innerText('body')).replace(/\n{2,}/g, '\n').slice(0, 900), url: pagina.url().split('?')[0] };
     await pagina.waitForTimeout(3000);
     if (!pagina.url().startsWith(BASE)) throw falla('sin_sesion');
 
@@ -121,7 +199,7 @@ async function sacar(pagina, correo) {
             const grupo = await leer(pagina);
             return await salir({ ok: true, ...grupo, leido: new Date().toISOString() });
         }
-        if ((accion === 'invitar' || accion === 'sacar') && CORREO.test(objetivo)) {
+        if (['invitar', 'sacar', 'ver-quitar'].includes(accion) && CORREO.test(objetivo)) {
             return await salir(accion === 'invitar' ? await invitar(pagina, objetivo) : await sacar(pagina, objetivo));
         }
 
