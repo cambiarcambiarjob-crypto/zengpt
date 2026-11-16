@@ -18,7 +18,7 @@ export interface Espacio {
 }
 
 export interface Cuenta {
-    id: number; email: string; started_on: string; expires_on: string; dias_restantes: number;
+    id: number; email: string; password: string | null; twofa_url: string | null; started_on: string; expires_on: string; dias_restantes: number;
     activa: boolean; por_vencer: boolean; notes: string | null;
     capacidad: number; ocupados: number; libres: number; ingresos: number; espacios: Espacio[];
 }

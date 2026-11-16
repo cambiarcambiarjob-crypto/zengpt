@@ -46,6 +46,8 @@ class AccountController extends Controller
 
         Account::query()->create([
             'email' => $data['email'],
+            'password' => filled($data['password'] ?? null) ? $data['password'] : null,
+            'twofa_url' => filled($data['twofa_url'] ?? null) ? trim($data['twofa_url']) : null,
             'started_on' => $inicio->toDateString(),
             'expires_on' => $inicio->copy()->addMonthsNoOverflow((int) config('zengpt.meses_cuenta'))->toDateString(),
             'notes' => $data['notes'] ?? null,
@@ -62,6 +64,8 @@ class AccountController extends Controller
 
         $account->update([
             'email' => $data['email'],
+            'password' => filled($data['password'] ?? null) ? $data['password'] : null,
+            'twofa_url' => filled($data['twofa_url'] ?? null) ? trim($data['twofa_url']) : null,
             'started_on' => $inicio->toDateString(),
             // La vigencia se recalcula desde el inicio salvo que el administrador fije otra fecha.
             'expires_on' => $request->user()->isAdmin() && filled($data['expires_on'] ?? null)
@@ -92,9 +96,11 @@ class AccountController extends Controller
 
         return $request->validate([
             'email' => ['required', 'email:rfc', 'max:255', Rule::unique('accounts', 'email')->ignore($account?->id)],
+            'password' => ['nullable', 'string', 'max:255'],
+            'twofa_url' => ['nullable', 'url:https,http', 'max:500'],
             'started_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.Hoy::carbon()->addDay()->toDateString()],
             'expires_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:started_on'],
             'notes' => ['nullable', 'string', 'max:500'],
-        ], ['email.unique' => 'Esa cuenta ya está registrada.'], ['email' => 'correo de la cuenta', 'started_on' => 'fecha de inicio', 'expires_on' => 'fecha de vencimiento', 'notes' => 'notas']);
+        ], ['email.unique' => 'Esa cuenta ya está registrada.'], ['email' => 'correo de la cuenta', 'password' => 'contraseña de la cuenta', 'twofa_url' => 'liga de 2FA', 'started_on' => 'fecha de inicio', 'expires_on' => 'fecha de vencimiento', 'notes' => 'notas']);
     }
 }

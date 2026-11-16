@@ -67,6 +67,25 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                         <span aria-hidden="true"> · </span>
                         <span className={cn('font-medium', TONO_DIAS[estado])}>{diasEnPalabras(dias)}</span>
                     </p>
+                    {(cuenta.password || cuenta.twofa_url) && (
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-suave">
+                            {cuenta.password && (
+                                <Copiable texto={cuenta.password} etiqueta="contraseña de la cuenta">
+                                    <span className="text-tenue">Contraseña:</span> <span className="cifras text-texto">{cuenta.password}</span>
+                                </Copiable>
+                            )}
+                            {cuenta.twofa_url && (
+                                <>
+                                    <a href={cuenta.twofa_url} target="_blank" rel="noopener noreferrer" className="text-acento underline-offset-2 hover:underline">
+                                        Abrir código 2FA
+                                    </a>
+                                    <Copiable texto={cuenta.twofa_url} etiqueta="liga de 2FA">
+                                        Copiar liga
+                                    </Copiable>
+                                </>
+                            )}
+                        </div>
+                    )}
                     {cuenta.notes && (
                         <p className="mt-2 flex max-w-2xl items-start gap-1.5 text-[13px] leading-snug text-suave">
                             <StickyNote className="mt-0.5 size-3.5 shrink-0 text-tenue" aria-hidden="true" />

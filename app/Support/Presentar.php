@@ -16,6 +16,8 @@ final class Presentar
         return [
             'id' => $account->id,
             'email' => $account->email,
+            'password' => $account->password,
+            'twofa_url' => $account->twofa_url,
             'started_on' => $account->started_on->toDateString(),
             'expires_on' => $account->expires_on->toDateString(),
             'dias_restantes' => $account->daysLeft(),

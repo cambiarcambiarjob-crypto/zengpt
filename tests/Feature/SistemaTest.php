@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\Hoy;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -203,5 +204,21 @@ class SistemaTest extends TestCase
 
         $this->post('/login', ['username' => 'christian2', 'password' => 'UnaClaveLarga123'])->assertRedirect('/');
         $this->assertFalse(auth()->user()->isAdmin());
+    }
+
+    public function test_la_cuenta_guarda_contrasena_cifrada_y_liga_de_2fa(): void
+    {
+        $this->actingAs($this->socio)->post('/cuentas', [
+            'email' => 'prueba@gmail.com', 'password' => 'Clave-De-Prueba-1', 'twofa_url' => 'https://api2fa.example/abc123', 'started_on' => Hoy::fecha(),
+        ])->assertSessionHasNoErrors();
+
+        $cuenta = Account::query()->where('email', 'prueba@gmail.com')->firstOrFail();
+        $this->assertSame('Clave-De-Prueba-1', $cuenta->password);
+        $this->assertNotSame('Clave-De-Prueba-1', DB::table('accounts')->where('id', $cuenta->id)->value('password'));
+
+        $this->actingAs($this->socio)->get('/cuentas')->assertInertia(fn (Assert $page) => $page
+            ->where('cuentas.0.password', 'Clave-De-Prueba-1')->where('cuentas.0.twofa_url', 'https://api2fa.example/abc123'));
+
+        $this->actingAs($this->socio)->post('/cuentas', ['email' => 'otra@gmail.com', 'twofa_url' => 'no-es-una-liga', 'started_on' => Hoy::fecha()])->assertSessionHasErrors('twofa_url');
     }
 }

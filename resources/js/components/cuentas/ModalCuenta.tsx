@@ -36,6 +36,8 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
 
     const form = useForm({
         email: cuenta?.email ?? '',
+        password: cuenta?.password ?? '',
+        twofa_url: cuenta?.twofa_url ?? '',
         started_on: cuenta?.started_on ?? negocio.hoy,
         expires_on: puedeFijar && fijadaDeOrigen ? cuenta.expires_on : '',
         notes: cuenta?.notes ?? '',
@@ -53,6 +55,8 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
 
         form.transform((datos) => ({
             email: datos.email.trim(),
+            password: datos.password,
+            twofa_url: datos.twofa_url.trim(),
             started_on: datos.started_on,
             notes: datos.notes.trim(),
             ...(puedeFijar ? { expires_on: fijar ? datos.expires_on : '' } : {}),
@@ -104,6 +108,35 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
                     value={form.data.email}
                     onChange={(evento) => form.setData('email', evento.target.value)}
                     error={form.errors.email}
+                />
+
+                <Campo
+                    etiqueta="Contraseña de la cuenta"
+                    opcional
+                    type="text"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    maxLength={255}
+                    value={form.data.password}
+                    onChange={(evento) => form.setData('password', evento.target.value)}
+                    error={form.errors.password}
+                />
+
+                <Campo
+                    etiqueta="Liga de 2FA (código de verificación)"
+                    opcional
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="https://…"
+                    maxLength={500}
+                    value={form.data.twofa_url}
+                    onChange={(evento) => form.setData('twofa_url', evento.target.value)}
+                    error={form.errors.twofa_url}
                 />
 
                 <div className="flex flex-col gap-2">

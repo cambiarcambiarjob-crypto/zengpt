@@ -12,11 +12,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Account extends Model
 {
-    protected $fillable = ['email', 'started_on', 'expires_on', 'notes', 'created_by'];
+    protected $hidden = ['password'];
+
+    protected $fillable = ['email', 'password', 'twofa_url', 'started_on', 'expires_on', 'notes', 'created_by'];
 
     protected function casts(): array
     {
-        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d'];
+        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted'];
     }
 
     public function setEmailAttribute(string $value): void
