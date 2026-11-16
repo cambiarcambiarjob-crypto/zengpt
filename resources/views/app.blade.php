@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#07070b">
+    <title inertia>ZenGPT</title>
+    @routes
+    @viteReactRefresh
+    @vite(['resources/css/app.css', 'resources/js/app.tsx'])
+    @inertiaHead
+</head>
+<body class="antialiased">
+    @inertia
+</body>
+</html>
