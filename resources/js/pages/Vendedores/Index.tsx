@@ -96,7 +96,7 @@ export default function VendedoresIndex() {
                 </>
             }
         >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <Aparecer indice={0}>
                     <TarjetaFoco className="h-full">
                         <Cifra etiqueta="Vendedores activos" icono={<UserCheck className="size-4" />} valor={activos} formato="numero" detalle={deBaja > 0 ? `${plural(vendedores.length, 'vendedor', 'vendedores')} en el catálogo, ${deBaja} de baja` : 'Todo el catálogo está activo'} />
@@ -107,7 +107,7 @@ export default function VendedoresIndex() {
                         <Cifra etiqueta="Ventas acumuladas" icono={<Users className="size-4" />} valor={totalVentas} formato="numero" detalle="Clientes vendidos entre todos, desde el inicio" />
                     </TarjetaFoco>
                 </Aparecer>
-                <Aparecer indice={2}>
+                <Aparecer indice={2} className="max-sm:col-span-2">
                     <TarjetaFoco className="h-full">
                         <p className="flex items-center gap-1.5 text-[13px] font-medium text-suave">
                             <Trophy className="size-4 shrink-0 text-tenue" aria-hidden="true" />
@@ -155,7 +155,7 @@ export default function VendedoresIndex() {
                             <div className={cn('hidden border-y border-borde px-5 py-2.5 text-[11px] font-semibold tracking-wider text-tenue uppercase sm:px-6', REJILLA)} aria-hidden="true">
                                 <span>Vendedor</span>
                                 <span>Ventas acumuladas</span>
-                                <span className="w-44 text-right">Acciones</span>
+                                <span className="w-56 text-right">Acciones</span>
                             </div>
 
                             <ul className="max-md:border-t max-md:border-borde">
@@ -211,12 +211,12 @@ export default function VendedoresIndex() {
                                                 </span>
                                             </div>
 
-                                            <div className="flex items-center justify-between gap-2 max-md:mt-3 md:w-44 md:justify-end">
+                                            <div className="flex items-center justify-between gap-2 max-md:mt-3 md:w-56 md:justify-end">
                                                 <Boton tamano="sm" variante="fantasma" icono={<Pencil className="size-3.5" aria-hidden="true" />} onClick={() => abrir(vendedor)} aria-label={`Renombrar a ${vendedor.name}`} className="max-md:h-10 max-md:px-3">
                                                     Renombrar
                                                 </Boton>
                                                 {vendedor.is_owner ? (
-                                                    <span className="flex h-11 items-center gap-1.5 text-xs text-tenue" title="El dueño no se puede dar de baja">
+                                                    <span className="flex h-11 items-center gap-1.5 text-xs whitespace-nowrap text-tenue" title="El dueño no se puede dar de baja">
                                                         <Lock className="size-3.5" aria-hidden="true" />
                                                         Siempre activo
                                                     </span>

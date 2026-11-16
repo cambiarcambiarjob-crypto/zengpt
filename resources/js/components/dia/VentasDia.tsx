@@ -20,19 +20,36 @@ export interface VentasDiaProps {
     className?: string;
 }
 
+/** Un correo que, si no cabe en su columna, se parte antes de la arroba (y no a media palabra). */
+function Correo({ correo }: { correo: string }) {
+    const arroba = correo.lastIndexOf('@');
+    if (arroba <= 0) return <>{correo}</>;
+
+    return (
+        <>
+            {correo.slice(0, arroba)}
+            <wbr />
+            {correo.slice(arroba)}
+        </>
+    );
+}
+
 function Cuenta({ venta }: { venta: Espacio }) {
     if (!venta.account_email) return <span className="text-tenue">Sin cuenta</span>;
 
     return (
         <Link
             href={`/cuentas?estado=todas&q=${encodeURIComponent(venta.account_email)}`}
-            className="break-all text-suave underline decoration-borde-fuerte underline-offset-4 transition-colors hover:text-acento hover:decoration-acento/60"
+            className="text-suave underline decoration-borde-fuerte underline-offset-4 transition-colors [overflow-wrap:anywhere] hover:text-acento hover:decoration-acento/60"
             title="Ver la cuenta"
         >
-            {venta.account_email}
+            <Correo correo={venta.account_email} />
         </Link>
     );
 }
+
+/** Columnas intermedias con menos relleno cuando la tarjeta comparte renglón con la publicidad en pantallas medianas. */
+const APRETADA = 'xl:max-2xl:px-2.5!';
 
 /** Ventas capturadas con la fecha del día: a quién, en qué cuenta, quién vendió y cuánto. El pie suma el total. */
 export function VentasDia({ ventas, esHoy, hayEspacio, accionPrincipal, alAgregar, className }: VentasDiaProps) {
@@ -44,12 +61,14 @@ export function VentasDia({ ventas, esHoy, hayEspacio, accionPrincipal, alAgrega
             titulo: 'Cliente',
             celda: (venta) => (
                 <>
-                    <span className="block font-medium break-all text-texto">{venta.client_email}</span>
+                    <span className="block font-medium text-texto [overflow-wrap:anywhere]">
+                        <Correo correo={venta.client_email} />
+                    </span>
                     {venta.client_phone && <span className="cifras block text-xs text-tenue">{venta.client_phone}</span>}
                     {/* Celular: cuenta y vendedor bajan aquí (sus columnas se ocultan). */}
                     <span className="mt-0.5 block text-xs text-tenue sm:hidden">
                         {venta.seller_name ?? 'Sin vendedor'}
-                        {venta.account_email && <span className="break-all"> · {venta.account_email}</span>}
+                        {venta.account_email && <span className="[overflow-wrap:anywhere]"> · {venta.account_email}</span>}
                     </span>
                 </>
             ),
@@ -59,8 +78,8 @@ export function VentasDia({ ventas, esHoy, hayEspacio, accionPrincipal, alAgrega
                 </>
             ),
         },
-        { clave: 'cuenta', titulo: 'Cuenta', celda: (venta) => <Cuenta venta={venta} />, ocultar: 'movil' },
-        { clave: 'vendedor', titulo: 'Vendedor', celda: (venta) => venta.seller_name ?? <span className="text-tenue">Sin vendedor</span>, ocultar: 'movil', clase: 'whitespace-nowrap' },
+        { clave: 'cuenta', titulo: 'Cuenta', celda: (venta) => <Cuenta venta={venta} />, ocultar: 'movil', clase: APRETADA },
+        { clave: 'vendedor', titulo: 'Vendedor', celda: (venta) => venta.seller_name ?? <span className="text-tenue">Sin vendedor</span>, ocultar: 'movil', clase: cn('whitespace-nowrap', APRETADA) },
         { clave: 'precio', titulo: 'Precio', numerica: true, celda: (venta) => dinero(venta.price_cents), pie: dinero(total, { mxn: true }) },
     ];
 

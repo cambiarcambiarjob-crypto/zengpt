@@ -123,9 +123,7 @@ export function RankingVendedores({ filas, totales, dueno, porcentajeSocio, porc
                                     <dl className="cifras grid grid-cols-3 gap-x-4 text-sm max-md:mt-3 md:contents">
                                         <div className="min-w-0 md:text-right">
                                             <dt className="text-xs text-tenue md:sr-only">Publicidad</dt>
-                                            <dd className="max-md:mt-0.5">
-                                                <Monto centavos={-fila.publicidad} />
-                                            </dd>
+                                            <dd className="text-suave max-md:mt-0.5">{dinero(-fila.publicidad)}</dd>
                                         </div>
                                         <div className="min-w-0 md:text-right">
                                             <dt className="text-xs text-tenue md:sr-only">Neto</dt>

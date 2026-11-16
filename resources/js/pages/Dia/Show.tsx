@@ -137,7 +137,6 @@ export default function DiaShow() {
                 alConfirmar={() => {
                     const destino = destinoPendiente;
                     setDestinoPendiente(null);
-                    publicidadPendiente.current = false;
                     if (destino) visitar(destino);
                 }}
             >

@@ -279,3 +279,20 @@
         scroll-behavior: auto !important;
     }
 }
+
+/* Listas desplegables nativas: el menú del navegador no hereda el fondo transparente del campo. */
+select {
+    color-scheme: dark;
+}
+select option,
+select optgroup {
+    background-color: var(--color-superficie-2);
+    color: var(--color-texto);
+}
+select option:disabled {
+    color: var(--color-tenue);
+}
+select option:checked {
+    background-color: var(--color-acento-hondo);
+    color: var(--color-texto);
+}
