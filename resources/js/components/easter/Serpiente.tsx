@@ -3,12 +3,16 @@ import CountUp from '@/components/reactbits/CountUp';
 import GradientText from '@/components/reactbits/GradientText';
 import SpotlightCard from '@/components/reactbits/SpotlightCard';
 import StarBorder from '@/components/reactbits/StarBorder';
+import cabeza2Url from './cabeza-2.webp';
+import cabeza3Url from './cabeza-3.webp';
+import cabeza4Url from './cabeza-4.webp';
 import cabezaUrl from './cabeza.webp';
-import { Musica } from './musica';
+import { Musica, type Pista } from './musica';
 
 /**
- * Easter egg: Snake neón estilo arcade. La cabeza es una imagen, la comida son bloques de Tetris de colores
- * y la música electrónica se sintetiza en vivo. Se descarga aparte (import dinámico) solo cuando alguien lo abre.
+ * Easter egg: Snake neón estilo arcade. La cabeza es una foto que cambia con el nivel, la comida son bloques de
+ * Tetris y cada nivel trae su fondo animado y su música (la canción o una pieza estilo Tetris), en ciclo de 3.
+ * Se descarga aparte (import dinámico) solo cuando alguien lo abre.
  */
 
 const CELDAS = 20;
@@ -17,6 +21,28 @@ const COMIDAS_POR_NIVEL = 5;
 const PIEZAS = ['#22e5ff', '#ffe600', '#c84bff', '#3dff7a', '#ff3d5e', '#3d7bff', '#ff9a1f'];
 
 type Punto = { x: number; y: number };
+type Fondo = 'rejilla' | 'synthwave' | 'lluvia' | 'estrellas';
+type Tema = { cara: string; color: string; pista: Pista; fondo: Fondo };
+
+// Ciclo de 4 niveles: 1 león, 2 lentes, 3 traje, 4 blanco y negro (y vuelve a empezar en el 5).
+// Niveles 1–2 con la canción; 3–4 con la pieza estilo Tetris.
+const TEMAS: Tema[] = [
+    { cara: cabezaUrl, color: '#22e5ff', pista: 'cancion', fondo: 'rejilla' },
+    { cara: cabeza2Url, color: '#ff3dd8', pista: 'cancion', fondo: 'synthwave' },
+    { cara: cabeza3Url, color: '#ff9a1f', pista: 'tetris', fondo: 'lluvia' },
+    { cara: cabeza4Url, color: '#e8e8ff', pista: 'tetris', fondo: 'estrellas' },
+];
+const temaDe = (nivel: number) => TEMAS[(nivel - 1) % TEMAS.length];
+const indiceTema = (nivel: number) => (nivel - 1) % TEMAS.length;
+
+type Pieza = { x: number; y: number; v: number; color: string; celdas: Punto[] };
+const FORMAS: Punto[][] = [
+    [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }],
+    [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }],
+    [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 1 }],
+    [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }],
+    [{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: 2 }, { x: 1, y: 2 }],
+];
 type Chispa = { x: number; y: number; vx: number; vy: number; vida: number; color: string };
 type Fase = 'inicio' | 'jugando' | 'pausa' | 'fin';
 
@@ -41,6 +67,8 @@ const intervaloDe = (nivel: number) => Math.max(55, 150 - (nivel - 1) * 12);
 
 interface Estado {
     cuerpo: Punto[];
+    /** Posiciones antes del último paso: para dibujar el movimiento suave entre casillas. */
+    previo: Punto[];
     direccion: Punto;
     cola: Punto[];
     comida: Punto;
@@ -67,7 +95,7 @@ function nuevoEstado(): Estado {
         { x: 6, y: 10 },
     ];
 
-    return { cuerpo, direccion: { x: 1, y: 0 }, cola: [], comida: comidaLibre(cuerpo), color: azar(), siguiente: azar(), puntos: 0, comidas: 0, nivel: 1 };
+    return { cuerpo, previo: cuerpo.map((c) => ({ ...c })), direccion: { x: 1, y: 0 }, cola: [], comida: comidaLibre(cuerpo), color: azar(), siguiente: azar(), puntos: 0, comidas: 0, nivel: 1 };
 }
 
 const neon = (color: string) => ({ color, textShadow: `0 0 6px ${color}, 0 0 18px ${color}` });
@@ -91,7 +119,11 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
     const estado = useRef<Estado>(nuevoEstado());
     const fase = useRef<Fase>('inicio');
     const musica = useRef<Musica | null>(null);
-    const imagen = useRef<HTMLImageElement | null>(null);
+    const imagenes = useRef<HTMLImageElement[]>([]);
+    const onda = useRef<{ x: number; y: number; inicio: number; color: string } | null>(null);
+    const lluvia = useRef<Pieza[]>([]);
+    const estrellas = useRef<{ x: number; y: number; z: number }[]>([]);
+    const ultimoCuadro = useRef(0);
     const reducido = useRef(typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     const chispas = useRef<Chispa[]>([]);
     const sacudida = useRef(0);
@@ -107,46 +139,152 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
     }, []);
 
     // ——— Dibujo ———————————————————————————————————————————————————————————————
-    const dibujar = useCallback((t: number) => {
-        const c = lienzo.current;
-        if (!c) return;
-        const ctx = c.getContext('2d');
-        if (!ctx) return;
-        const lado = c.width;
-        const celda = lado / CELDAS;
-        const e = estado.current;
-        const brillo = reducido.current ? 1 : 0.85 + 0.15 * Math.sin(t / 260);
+    /** Fondo de cada tema: rejilla que respira, synthwave que avanza o lluvia de piezas de Tetris. */
+    const dibujarFondo = useCallback((ctx: CanvasRenderingContext2D, lado: number, celda: number, t: number, dt: number, tema: Tema) => {
+        const quieto = reducido.current;
 
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.fillStyle = '#05030f';
-        ctx.fillRect(0, 0, lado, lado);
-        // Sacudida al perder (no con «menos movimiento»).
-        if (sacudida.current > t && !reducido.current) {
-            const fuerza = ((sacudida.current - t) / 350) * celda * 0.35;
-            ctx.translate((Math.random() - 0.5) * fuerza, (Math.random() - 0.5) * fuerza);
+        if (tema.fondo === 'rejilla') {
+            const a = quieto ? 0.1 : 0.08 + 0.04 * Math.sin(t / 900);
+            ctx.strokeStyle = `rgba(120, 80, 255, ${a})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 1; i < CELDAS; i++) {
+                ctx.moveTo(i * celda, 0);
+                ctx.lineTo(i * celda, lado);
+                ctx.moveTo(0, i * celda);
+                ctx.lineTo(lado, i * celda);
+            }
+            ctx.stroke();
+            return;
         }
 
-        // Cuadrícula tenue.
-        ctx.strokeStyle = 'rgba(120, 80, 255, 0.10)';
-        ctx.lineWidth = 1;
-        for (let i = 1; i < CELDAS; i++) {
+        if (tema.fondo === 'synthwave') {
+            // Rejilla que corre hacia abajo + barrido de luz.
+            const desplazamiento = quieto ? 0 : (t * 0.04) % celda;
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(255, 61, 216, 0.16)';
             ctx.beginPath();
+            for (let y = -celda + desplazamiento; y < lado; y += celda) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(lado, y);
+            }
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(34, 229, 255, 0.12)';
+            ctx.beginPath();
+            for (let i = 1; i < CELDAS; i++) {
+                ctx.moveTo(i * celda, 0);
+                ctx.lineTo(i * celda, lado);
+            }
+            ctx.stroke();
+            if (!quieto) {
+                const y = ((t * 0.12) % (lado * 1.4)) - lado * 0.2;
+                const g = ctx.createLinearGradient(0, y - celda * 2, 0, y + celda * 2);
+                g.addColorStop(0, 'rgba(255,61,216,0)');
+                g.addColorStop(0.5, 'rgba(255,61,216,0.10)');
+                g.addColorStop(1, 'rgba(255,61,216,0)');
+                ctx.fillStyle = g;
+                ctx.fillRect(0, y - celda * 2, lado, celda * 4);
+            }
+            return;
+        }
+
+        if (tema.fondo === 'estrellas') {
+            // Viaje entre estrellas: salen del centro hacia las orillas.
+            if (estrellas.current.length === 0) estrellas.current = Array.from({ length: 90 }, () => ({ x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z: Math.random() }));
+            const centro = lado / 2;
+            ctx.save();
+            ctx.fillStyle = '#e8e8ff';
+            for (const est of estrellas.current) {
+                if (!quieto) {
+                    est.z -= dt * 0.35;
+                    if (est.z <= 0.02) {
+                        est.x = Math.random() * 2 - 1;
+                        est.y = Math.random() * 2 - 1;
+                        est.z = 1;
+                    }
+                }
+                const sx = centro + (est.x / est.z) * centro * 0.5;
+                const sy = centro + (est.y / est.z) * centro * 0.5;
+                if (sx < 0 || sy < 0 || sx > lado || sy > lado) continue;
+                const tamEst = Math.max(0.6, (1 - est.z) * celda * 0.18);
+                ctx.globalAlpha = Math.min(0.85, (1 - est.z) * 1.1);
+                ctx.fillRect(sx, sy, tamEst, tamEst);
+            }
+            ctx.restore();
+            return;
+        }
+
+        // Lluvia de piezas de Tetris (tenue, detrás de todo).
+        if (lluvia.current.length === 0) {
+            lluvia.current = Array.from({ length: 12 }, () => ({
+                x: Math.floor(Math.random() * (CELDAS - 3)),
+                y: Math.random() * CELDAS - CELDAS,
+                v: 1.5 + Math.random() * 2.5,
+                color: PIEZAS[Math.floor(Math.random() * PIEZAS.length)],
+                celdas: FORMAS[Math.floor(Math.random() * FORMAS.length)],
+            }));
+        }
+        ctx.save();
+        ctx.globalAlpha = 0.16;
+        for (const pieza of lluvia.current) {
+            if (!quieto) {
+                pieza.y += pieza.v * dt;
+                if (pieza.y > CELDAS + 2) {
+                    pieza.y = -4;
+                    pieza.x = Math.floor(Math.random() * (CELDAS - 3));
+                }
+            }
+            ctx.fillStyle = pieza.color;
+            for (const c of pieza.celdas) ctx.fillRect((pieza.x + c.x) * celda + 1, (Math.floor(pieza.y) + c.y) * celda + 1, celda - 2, celda - 2);
+        }
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(255, 154, 31, 0.07)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 1; i < CELDAS; i++) {
             ctx.moveTo(i * celda, 0);
             ctx.lineTo(i * celda, lado);
             ctx.moveTo(0, i * celda);
             ctx.lineTo(lado, i * celda);
-            ctx.stroke();
         }
+        ctx.stroke();
+    }, []);
 
-        // Comida: bloque de Tetris con bisel y brillo.
-        const bloque = (x: number, y: number, color: string, margen = 2) => {
-            const px = x * celda + margen;
-            const py = y * celda + margen;
+    const dibujar = useCallback(
+        (t: number, alfa: number) => {
+            const c = lienzo.current;
+            if (!c) return;
+            const ctx = c.getContext('2d');
+            if (!ctx) return;
+            const lado = c.width;
+            const celda = lado / CELDAS;
+            const e = estado.current;
+            const tema = temaDe(e.nivel);
+            const brillo = reducido.current ? 1 : 0.85 + 0.15 * Math.sin(t / 260);
+            const dt = Math.min(0.05, (t - (ultimoCuadro.current || t)) / 1000);
+            ultimoCuadro.current = t;
+
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = '#05030f';
+            ctx.fillRect(0, 0, lado, lado);
+            // Sacudida al perder (no con «menos movimiento»).
+            if (sacudida.current > t && !reducido.current) {
+                const fuerza = ((sacudida.current - t) / 350) * celda * 0.35;
+                ctx.translate((Math.random() - 0.5) * fuerza, (Math.random() - 0.5) * fuerza);
+            }
+
+            dibujarFondo(ctx, lado, celda, t, dt, tema);
+
+            // Comida: bloque de Tetris con bisel, que late.
+            const latido = reducido.current ? 0 : Math.sin(t / 180) * 1.5;
+            const margen = 2 - latido;
+            const px = e.comida.x * celda + margen;
+            const py = e.comida.y * celda + margen;
             const tam = celda - margen * 2;
             ctx.save();
-            ctx.shadowColor = color;
+            ctx.shadowColor = e.color;
             ctx.shadowBlur = 18 * brillo;
-            ctx.fillStyle = color;
+            ctx.fillStyle = e.color;
             ctx.fillRect(px, py, tam, tam);
             ctx.restore();
             ctx.fillStyle = 'rgba(255,255,255,0.45)';
@@ -155,69 +293,114 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
             ctx.fillStyle = 'rgba(0,0,0,0.30)';
             ctx.fillRect(px, py + tam * 0.82, tam, tam * 0.18);
             ctx.fillRect(px + tam * 0.82, py, tam * 0.18, tam);
-        };
-        bloque(e.comida.x, e.comida.y, e.color);
 
-        // Cuerpo: segmentos neón que cambian de color a lo largo (magenta → cian).
-        for (let i = e.cuerpo.length - 1; i >= 1; i--) {
-            const s = e.cuerpo[i];
-            const hue = 300 - (i / Math.max(1, e.cuerpo.length - 1)) * 120;
-            const color = `hsl(${hue}, 100%, 60%)`;
-            const m = 3;
+            // Posiciones suavizadas: entre la casilla anterior y la nueva según el avance del paso.
+            const pos = (i: number): Punto => {
+                const b = e.cuerpo[i];
+                const a = e.previo[i] ?? e.previo[e.previo.length - 1] ?? b;
+                return { x: (a.x + (b.x - a.x) * alfa + 0.5) * celda, y: (a.y + (b.y - a.y) * alfa + 0.5) * celda };
+            };
+            const puntos = e.cuerpo.map((_, i) => pos(i));
+
+            // Cuerpo continuo: un trazo con brillo y encima los tramos de color (magenta → cian).
+            if (puntos.length > 1) {
+                ctx.save();
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = celda * 0.64;
+                ctx.shadowColor = tema.color;
+                ctx.shadowBlur = 16 * brillo;
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+                ctx.beginPath();
+                ctx.moveTo(puntos[0].x, puntos[0].y);
+                for (let i = 1; i < puntos.length; i++) ctx.lineTo(puntos[i].x, puntos[i].y);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                const desfase = indiceTema(e.nivel) * 50;
+                for (let i = puntos.length - 1; i >= 1; i--) {
+                    const hue = (300 - (i / Math.max(1, puntos.length - 1)) * 120 + desfase) % 360;
+                    ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+                    ctx.beginPath();
+                    ctx.moveTo(puntos[i].x, puntos[i].y);
+                    ctx.lineTo(puntos[i - 1].x, puntos[i - 1].y);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            // Cabeza: la foto del nivel, con marco neón del color del tema.
+            const cabeza = puntos[0];
+            const tamCabeza = celda * 1.5;
+            const cx = cabeza.x - tamCabeza / 2;
+            const cy = cabeza.y - tamCabeza / 2;
             ctx.save();
-            ctx.shadowColor = color;
-            ctx.shadowBlur = 14 * brillo;
-            ctx.fillStyle = color;
+            ctx.shadowColor = tema.color;
+            ctx.shadowBlur = 22 * brillo;
+            ctx.strokeStyle = tema.color;
+            ctx.lineWidth = 3;
             ctx.beginPath();
-            ctx.roundRect(s.x * celda + m, s.y * celda + m, celda - m * 2, celda - m * 2, 4);
-            ctx.fill();
+            ctx.roundRect(cx, cy, tamCabeza, tamCabeza, tamCabeza * 0.28);
+            ctx.stroke();
             ctx.restore();
-        }
-
-        // Cabeza: la imagen, un poco más grande, con marco neón.
-        const h = e.cuerpo[0];
-        const tamCabeza = celda * 1.45;
-        const cx = h.x * celda + celda / 2 - tamCabeza / 2;
-        const cy = h.y * celda + celda / 2 - tamCabeza / 2;
-        ctx.save();
-        ctx.shadowColor = '#22e5ff';
-        ctx.shadowBlur = 22 * brillo;
-        ctx.strokeStyle = '#22e5ff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.roundRect(cx, cy, tamCabeza, tamCabeza, tamCabeza * 0.28);
-        ctx.stroke();
-        ctx.restore();
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(cx, cy, tamCabeza, tamCabeza, tamCabeza * 0.28);
-        ctx.clip();
-        if (imagen.current?.complete) ctx.drawImage(imagen.current, cx, cy, tamCabeza, tamCabeza);
-        else {
-            ctx.fillStyle = '#22e5ff';
-            ctx.fillRect(cx, cy, tamCabeza, tamCabeza);
-        }
-        ctx.restore();
-
-        // Chispas de la comida (se mueven y se apagan solas).
-        if (chispas.current.length) {
             ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            chispas.current = chispas.current.filter((ch) => {
-                ch.x += ch.vx;
-                ch.y += ch.vy;
-                ch.vx *= 0.94;
-                ch.vy *= 0.94;
-                ch.vida -= 0.035;
-                if (ch.vida <= 0) return false;
-                ctx.globalAlpha = ch.vida;
-                ctx.fillStyle = ch.color;
-                ctx.fillRect(ch.x * celda, ch.y * celda, celda * 0.16, celda * 0.16);
-                return true;
-            });
+            ctx.beginPath();
+            ctx.roundRect(cx, cy, tamCabeza, tamCabeza, tamCabeza * 0.28);
+            ctx.clip();
+            const foto = imagenes.current[indiceTema(e.nivel)];
+            if (foto?.complete) ctx.drawImage(foto, cx, cy, tamCabeza, tamCabeza);
+            else {
+                ctx.fillStyle = tema.color;
+                ctx.fillRect(cx, cy, tamCabeza, tamCabeza);
+            }
             ctx.restore();
-        }
-    }, []);
+
+            // Chispas de la comida.
+            if (chispas.current.length) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                chispas.current = chispas.current.filter((ch) => {
+                    ch.x += ch.vx;
+                    ch.y += ch.vy;
+                    ch.vx *= 0.94;
+                    ch.vy *= 0.94;
+                    ch.vida -= 0.035;
+                    if (ch.vida <= 0) return false;
+                    ctx.globalAlpha = ch.vida;
+                    ctx.fillStyle = ch.color;
+                    ctx.fillRect(ch.x * celda, ch.y * celda, celda * 0.16, celda * 0.16);
+                    return true;
+                });
+                ctx.restore();
+            }
+
+            // Subida de nivel: destello y onda expansiva desde la cabeza.
+            const o = onda.current;
+            if (o) {
+                const k = (t - o.inicio) / 700;
+                if (k >= 1) onda.current = null;
+                else {
+                    ctx.save();
+                    ctx.globalAlpha = 0.35 * Math.max(0, 1 - k * 3);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, lado, lado);
+                    ctx.globalAlpha = 1 - k;
+                    ctx.strokeStyle = o.color;
+                    ctx.shadowColor = o.color;
+                    ctx.shadowBlur = 24;
+                    ctx.lineWidth = celda * 0.35 * (1 - k) + 2;
+                    for (const extra of [0, 0.18]) {
+                        const r = Math.max(0, k - extra) * lado * 1.1;
+                        if (r <= 0) continue;
+                        ctx.beginPath();
+                        ctx.arc(o.x * celda, o.y * celda, r, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+            }
+        },
+        [dibujarFondo],
+    );
 
     // ——— Lógica ———————————————————————————————————————————————————————————————
     const terminar = useCallback(() => {
@@ -235,6 +418,17 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
         refrescar();
     }, [refrescar]);
 
+    /** Aviso «NIVEL N», onda expansiva, fanfarria y la música del nuevo tema. */
+    const alSubirNivel = useCallback(() => {
+        const e = estado.current;
+        const tema = temaDe(e.nivel);
+        setAvisoNivel(e.nivel);
+        window.setTimeout(() => setAvisoNivel(null), 1300);
+        if (!reducido.current) onda.current = { x: e.cuerpo[0].x + 0.5, y: e.cuerpo[0].y + 0.5, inicio: performance.now(), color: tema.color };
+        musica.current?.subir();
+        musica.current?.tocar(tema.pista);
+    }, []);
+
     const avanzar = useCallback(() => {
         const e = estado.current;
         if (e.cola.length) {
@@ -242,10 +436,12 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
             if (d.x !== -e.direccion.x || d.y !== -e.direccion.y) e.direccion = d;
         }
         const cabeza = { x: e.cuerpo[0].x + e.direccion.x, y: e.cuerpo[0].y + e.direccion.y };
+        e.previo = e.cuerpo.map((c) => ({ ...c }));
         const come = cabeza.x === e.comida.x && cabeza.y === e.comida.y;
         const cuerpo = come ? e.cuerpo : e.cuerpo.slice(0, -1);
 
         if (cabeza.x < 0 || cabeza.y < 0 || cabeza.x >= CELDAS || cabeza.y >= CELDAS || cuerpo.some((s) => s.x === cabeza.x && s.y === cabeza.y)) {
+            e.previo = e.cuerpo.map((c) => ({ ...c }));
             terminar();
             return;
         }
@@ -263,17 +459,24 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
             e.comidas += 1;
             e.puntos += 10 * e.nivel;
             e.nivel = 1 + Math.floor(e.comidas / COMIDAS_POR_NIVEL);
-            if (e.nivel > nivelAntes) {
-                setAvisoNivel(e.nivel);
-                window.setTimeout(() => setAvisoNivel(null), 1100);
-            }
+            if (e.nivel > nivelAntes) alSubirNivel();
             e.comida = comidaLibre(e.cuerpo);
             e.color = e.siguiente;
             e.siguiente = azar();
             musica.current?.comer(e.nivel);
             refrescar();
         }
-    }, [refrescar, terminar]);
+    }, [alSubirNivel, refrescar, terminar]);
+
+    /** Truco (Shift + N): sube un nivel sin sumar puntos, para ver todos los temas. */
+    const saltarNivel = useCallback(() => {
+        if (fase.current !== 'jugando') return;
+        const e = estado.current;
+        e.nivel += 1;
+        e.comidas = (e.nivel - 1) * COMIDAS_POR_NIVEL;
+        alSubirNivel();
+        refrescar();
+    }, [alSubirNivel, refrescar]);
 
     const empezar = useCallback(() => {
         estado.current = nuevoEstado();
@@ -285,6 +488,8 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
         }
         musica.current.iniciar();
         musica.current.pausar(false);
+        musica.current.tocar(temaDe(1).pista);
+        onda.current = null;
         refrescar();
     }, [refrescar]);
 
@@ -318,25 +523,40 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
         setSilencio(nuevo);
     }, []);
 
-    // Imagen de la cabeza.
+    // Fotos de la cabeza (una por tema) y la canción: empiezan a cargar en cuanto se abre el juego.
     useEffect(() => {
-        const img = new Image();
-        img.src = cabezaUrl;
-        imagen.current = img;
+        imagenes.current = TEMAS.map((tema) => {
+            const img = new Image();
+            img.src = tema.cara;
+            return img;
+        });
+        if (!musica.current) {
+            musica.current = new Musica();
+            musica.current.silenciada = leer(SILENCIO) === '1';
+        }
     }, []);
 
     // Bucle: avanza a ritmo fijo según el nivel y dibuja cada cuadro.
     useEffect(() => {
         let id = 0;
         let ultimo = performance.now();
+        let alfa = 1;
         const ciclo = (t: number) => {
-            if (fase.current === 'jugando' && t - ultimo >= intervaloDe(estado.current.nivel)) {
-                ultimo = t;
-                avanzar();
-            } else if (fase.current !== 'jugando') {
-                ultimo = t;
+            const intervalo = intervaloDe(estado.current.nivel);
+            if (fase.current === 'jugando') {
+                if (t - ultimo >= intervalo) {
+                    // Paso fijo; si el navegador se atrasó mucho, no acumula pasos de golpe.
+                    ultimo = t - Math.min(intervalo, t - ultimo - intervalo);
+                    avanzar();
+                }
+                // Qué tanto va el paso actual (0 → 1): la serpiente se dibuja entre una casilla y la siguiente.
+                alfa = Math.min(1, (t - ultimo) / intervalo);
+            } else {
+                // En pausa se queda donde iba; al reanudar sigue desde ahí.
+                ultimo = t - alfa * intervalo;
+                if (fase.current !== 'pausa') alfa = 1;
             }
-            dibujar(t);
+            dibujar(t, alfa);
             id = requestAnimationFrame(ciclo);
         };
         id = requestAnimationFrame(ciclo);
@@ -393,12 +613,14 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
                 if (fase.current !== 'jugando') empezar();
             } else if (k === 'm') {
                 alternarSonido();
+            } else if (ev.key === 'N' && ev.shiftKey) {
+                saltarNivel();
             }
         };
         window.addEventListener('keydown', alPresionar);
 
         return () => window.removeEventListener('keydown', alPresionar);
-    }, [alCerrar, alternarSonido, empezar, girar, pausar]);
+    }, [alCerrar, alternarSonido, empezar, girar, pausar, saltarNivel]);
 
     // Deslizar el dedo en el celular.
     useEffect(() => {
@@ -435,7 +657,11 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Juego Snake">
             <div className="flex max-h-full w-full max-w-[920px] flex-col gap-3 border border-[#7a4bff]/50 bg-[#07051a] p-3 shadow-[0_0_40px_rgba(122,75,255,0.35)] sm:flex-row sm:p-4" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>
                 <div ref={caja} className="relative aspect-square w-full min-w-0 sm:w-[min(70vh,600px)] sm:flex-none">
-                    <canvas ref={lienzo} className="block touch-none border border-[#22e5ff]/40 shadow-[0_0_24px_rgba(34,229,255,0.25)]" />
+                    <canvas
+                        ref={lienzo}
+                        className="block touch-none border transition-[border-color,box-shadow] duration-700"
+                        style={{ borderColor: `${temaDe(vista.nivel).color}80`, boxShadow: `0 0 26px ${temaDe(vista.nivel).color}40` }}
+                    />
                     {/* Líneas de monitor retro (solo CSS). */}
                     <div className="pointer-events-none absolute inset-0 opacity-[0.13]" style={{ background: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.5) 0 1px, transparent 1px 3px)' }} aria-hidden="true" />
 
