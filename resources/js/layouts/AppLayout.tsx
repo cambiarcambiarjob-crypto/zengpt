@@ -1,6 +1,7 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { CalendarDays, ChartColumn, CircleUserRound, Ellipsis, Layers, LayoutDashboard, LogOut, Users, type LucideIcon } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { useSerpiente } from '@/components/easter/useSerpiente';
 import ClickSpark from '@/components/reactbits/ClickSpark';
 import ShinyText from '@/components/reactbits/ShinyText';
 import { Avisos } from '@/components/ui/Avisos';
@@ -9,6 +10,9 @@ import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
 import { fechaLarga, iniciales } from '@/lib/formato';
 import type { Compartido, Usuario } from '@/types';
+
+// Easter egg: solo se descarga si alguien lo activa.
+const Serpiente = lazy(() => import('@/components/easter/Serpiente'));
 
 interface Destino {
     href: string;
@@ -78,6 +82,7 @@ export default function AppLayout({ titulo, descripcion, acciones, ancho = 'norm
     const usuario = auth.user;
     const ruta = pagina.url.split(/[?#]/)[0] || '/';
     const [masAbierto, setMasAbierto] = useState(false);
+    const serpiente = useSerpiente();
 
     // Sin sesión no hay layout (el servidor ya redirige a /login); evita romper si llegara a pasar.
     if (!usuario) return <>{children}</>;
@@ -111,7 +116,7 @@ export default function AppLayout({ titulo, descripcion, acciones, ancho = 'norm
             {/* Barra lateral · escritorio */}
             <aside className="fixed inset-y-0 left-0 z-[1] hidden w-64 flex-col border-r border-borde bg-superficie/70 lg:flex">
                 <div className="px-5 pt-6 pb-5">
-                    <Link href="/" className="inline-flex items-center gap-2.5 rounded-campo" aria-label="ZenGPT, ir al panel">
+                    <Link href="/" onClick={serpiente.alClicEmblema} className="inline-flex items-center gap-2.5 rounded-campo" aria-label="ZenGPT, ir al panel">
                         <Emblema />
                         <ShinyText text="ZenGPT" color="#e8eeeb" shineColor="#34d8a6" speed={2.2} delay={7} className="font-titulo text-xl font-semibold tracking-tight" />
                     </Link>
@@ -166,7 +171,7 @@ export default function AppLayout({ titulo, descripcion, acciones, ancho = 'norm
 
             {/* Barra superior · celular y tableta */}
             <header className="sticky top-0 z-[1] flex h-14 items-center justify-between gap-3 border-b border-borde bg-fondo/90 px-4 backdrop-blur-md lg:hidden">
-                <Link href="/" className="inline-flex items-center gap-2 rounded-campo" aria-label="ZenGPT, ir al panel">
+                <Link href="/" onClick={serpiente.alClicEmblema} className="inline-flex items-center gap-2 rounded-campo" aria-label="ZenGPT, ir al panel">
                     <Emblema className="size-7" />
                     <span className="font-titulo text-lg font-semibold tracking-tight text-texto">
                         Zen<span className="text-acento">GPT</span>
@@ -262,6 +267,12 @@ export default function AppLayout({ titulo, descripcion, acciones, ancho = 'norm
             </Modal>
 
             <Avisos />
+
+            {serpiente.abierto && (
+                <Suspense fallback={null}>
+                    <Serpiente alCerrar={serpiente.cerrar} />
+                </Suspense>
+            )}
         </ClickSpark>
     );
 }
