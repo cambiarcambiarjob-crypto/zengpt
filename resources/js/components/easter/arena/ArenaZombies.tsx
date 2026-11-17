@@ -4,13 +4,14 @@ import SpotlightCard from '@/components/reactbits/SpotlightCard';
 import StarBorder from '@/components/reactbits/StarBorder';
 import { usePagina } from '@/lib/pagina';
 import { Musica } from '../musica';
-import type { ControlJuego, Hud, JugadorPartida, Resumen } from './escena';
+import type { ControlJuego, Hud, JugadorPartida, Resumen } from './tipos';
 import { PERSONAJES, personaje, type IdPersonaje } from './personajes';
 import { entrarSala, type Miembro, type Sala } from './red';
 
 /**
- * Easter egg «zombies»: shooter cooperativo para 2 en línea (o solo). Sala para elegir personaje, pantalla de
- * juego con Phaser (se descarga aparte) y resultados. El tiempo real va por Laravel Reverb.
+ * Easter egg «zombies»: shooter cooperativo en 3D (tercera persona) para 2 en línea (o solo). Sala para elegir
+ * personaje, pantalla de juego con Three.js (se descarga aparte, solo al jugar) y resultados. El tiempo real va
+ * por Laravel Reverb.
  */
 
 type Estado = 'conectando' | 'sala' | 'jugando' | 'fin';
@@ -117,7 +118,7 @@ export default function ArenaZombies({ alCerrar }: { alCerrar: () => void }) {
             setHud(null);
             setEstado('jugando');
             await new Promise((r) => requestAnimationFrame(r));
-            const { crearJuego } = await import('./escena');
+            const { crearJuego } = await import('./escena3d');
             if (!contenedor.current || estadoRef.current !== 'jugando') return;
             control.current?.destruir();
             control.current = crearJuego(contenedor.current, {
@@ -180,7 +181,8 @@ export default function ArenaZombies({ alCerrar }: { alCerrar: () => void }) {
 
     useEffect(() => {
         const tecla = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') cerrar();
+            // Durante la partida, Esc solo libera el mouse (lo hace el navegador); no cierra el juego.
+            if (e.key === 'Escape' && estadoRef.current !== 'jugando') cerrar();
             if (e.key.toLowerCase() === 'm' && musica.current) {
                 const nuevo = musica.current.alternarSilencio();
                 guardar('zengpt.snake.silencio', nuevo ? '1' : '0');
@@ -269,7 +271,7 @@ export default function ArenaZombies({ alCerrar }: { alCerrar: () => void }) {
 
             {estado !== 'fin' && (
                 <button type="button" onClick={cerrar} className="absolute top-3 right-3 z-10 border border-white/20 bg-black/50 px-3 py-1.5 text-xs tracking-widest text-white/80 hover:border-[#ff3d5e] hover:text-[#ff3d5e]">
-                    SALIR (ESC)
+                    {estado === 'jugando' ? 'SALIR' : 'SALIR (ESC)'}
                 </button>
             )}
         </div>
@@ -376,9 +378,9 @@ function SalaJuego(props: {
                         </StarBorder>
                     </div>
                     <p className="text-[11px] leading-relaxed text-white/45">
-                        Compu: WASD para moverte · mouse para apuntar y disparar · Espacio o clic derecho: habilidad · M: música
+                        Compu: WASD moverte · mouse mirar y apuntar · clic disparar · Q/E/clic derecho/Espacio habilidad · M música
                         <br />
-                        Celular: palanca izquierda para moverte · palanca derecha para apuntar y disparar
+                        Celular: palanca izquierda moverte · palanca derecha girar y disparar
                         <br />
                         Si tu compañero cae, quédate junto a él para revivirlo.
                     </p>
@@ -402,7 +404,7 @@ function Pantalla({ hud, yo, control }: { hud: Hud; yo: { nombre: string; person
 
     return (
         <div className="pointer-events-none absolute inset-0 select-none">
-            <div className="flex flex-wrap items-start gap-2 p-3 pr-32 sm:pr-36">
+            <div className="relative z-10 flex flex-wrap items-start gap-2 p-3 pr-32 sm:pr-36">
                 <Tarjeta nombre={yo.nombre} personaje={yo.personaje} vida={hud.yo.vida} vidaMax={hud.yo.vidaMax} caido={hud.yo.caido} bajas={hud.yo.bajas}>
                     <div className="mt-1 flex items-center gap-2 text-[10px] text-white/70">
                         <span className="h-1 flex-1 bg-white/10">
@@ -412,24 +414,28 @@ function Pantalla({ hud, yo, control }: { hud: Hud; yo: { nombre: string; person
                     </div>
                 </Tarjeta>
                 {hud.otro && <Tarjeta nombre={hud.otro.nombre} personaje={hud.otro.personaje} vida={hud.otro.vida} vidaMax={hud.otro.vidaMax} caido={hud.otro.caido} bajas={hud.otro.bajas} />}
-                <div className="ml-auto border border-white/10 bg-black/50 px-3 py-1.5 text-right">
-                    <p className="text-[10px] tracking-[0.3em] text-white/50">OLEADA</p>
+                <div className="ml-auto border border-white/10 bg-black/65 px-3 py-1.5 text-right">
+                    <p className="text-[10px] tracking-[0.3em] text-white/70">OLEADA</p>
                     <p className="text-2xl leading-none font-bold" style={neon('#3dff7a')}>
                         {hud.oleada}
                     </p>
                 </div>
-                <div className="border border-white/10 bg-black/50 px-3 py-1.5 text-right">
-                    <p className="text-[10px] tracking-[0.3em] text-white/50">PUNTOS</p>
+                <div className="border border-white/10 bg-black/65 px-3 py-1.5 text-right">
+                    <p className="text-[10px] tracking-[0.3em] text-white/70">PUNTOS</p>
                     <p className="text-2xl leading-none font-bold tabular-nums" style={neon('#22e5ff')}>
                         {hud.puntos}
                     </p>
                 </div>
             </div>
 
-            <div className="absolute inset-x-0 top-[22%] flex flex-col items-center text-center">
+            <div className="absolute inset-x-0 top-[22%] z-10 flex flex-col items-center text-center">
                 {hud.fase === 'preparando' && <Banner texto="¡PREPÁRENSE!" sub="Los zombies vienen en camino" color="#3dff7a" />}
                 {hud.fase === 'descanso' && <Banner texto={`OLEADA ${hud.oleada} SUPERADA`} sub={`Siguiente en ${Math.ceil(hud.tiempoFase)}… (recuperan vida)`} color="#22e5ff" />}
-                {hud.fase === 'oleada' && hud.restantes > 0 && <p className="text-xs tracking-[0.3em] text-white/50">{hud.restantes} ZOMBIES RESTANTES</p>}
+                {hud.fase === 'oleada' && hud.restantes > 0 && (
+                    <p className="bg-black/55 px-2.5 py-1 text-xs tracking-[0.3em] text-white/85 [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
+                        <span className="tabular-nums">{hud.restantes}</span> ZOMBIES RESTANTES
+                    </p>
+                )}
                 {hud.yo.caido && hud.fase !== 'fin' && (
                     <Banner texto="CAÍSTE" sub={hud.otro && !hud.otro.caido ? 'Tu compañero puede revivirte: que se quede junto a ti' : ''} color="#ff3d5e" />
                 )}
@@ -445,6 +451,21 @@ function Pantalla({ hud, yo, control }: { hud: Hud; yo: { nombre: string; person
                         <div className="h-full bg-gradient-to-r from-[#ff3d6e] to-[#ff3dd8] transition-[width] duration-150" style={{ width: `${hud.jefe * 100}%` }} />
                     </div>
                 </div>
+            )}
+
+            {!tactil && hud.bloqueado && !hud.yo.caido && <Mira color={p.color} />}
+
+            {!tactil && !hud.bloqueado && hud.fase !== 'fin' && (
+                <button
+                    type="button"
+                    onClick={() => control.current?.capturarMouse()}
+                    className="pointer-events-auto absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-3 bg-black/55"
+                >
+                    <GradientText colors={[p.color, '#ffffff', p.color]} animationSpeed={2} glow={1} className="text-2xl font-bold tracking-[0.3em] sm:text-4xl">
+                        HAZ CLIC PARA JUGAR
+                    </GradientText>
+                    <span className="text-[11px] tracking-widest text-white/60">WASD moverte · mouse mirar y apuntar · clic disparar · Q/E/clic derecho/Espacio habilidad · Esc soltar el mouse</span>
+                </button>
             )}
 
             {tactil && (
@@ -486,6 +507,21 @@ function Tarjeta(props: { nombre: string; personaje: IdPersonaje; vida: number; 
                 </div>
                 {props.children}
             </div>
+        </div>
+    );
+}
+
+/** Mira neón al centro de la pantalla (solo compu, con el mouse capturado). */
+function Mira({ color }: { color: string }) {
+    const brillo = { background: color, boxShadow: `0 0 6px ${color}, 0 0 12px ${color}` };
+    return (
+        <div className="absolute top-1/2 left-1/2 size-8 -translate-x-1/2 -translate-y-1/2" aria-hidden="true">
+            <span className="absolute top-0 left-1/2 h-2.5 w-0.5 -translate-x-1/2" style={brillo} />
+            <span className="absolute bottom-0 left-1/2 h-2.5 w-0.5 -translate-x-1/2" style={brillo} />
+            <span className="absolute top-1/2 left-0 h-0.5 w-2.5 -translate-y-1/2" style={brillo} />
+            <span className="absolute top-1/2 right-0 h-0.5 w-2.5 -translate-y-1/2" style={brillo} />
+            <span className="absolute top-1/2 left-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" style={{ boxShadow: `0 0 6px ${color}` }} />
+            <span className="absolute inset-[3px] rounded-full border opacity-50" style={{ borderColor: color }} />
         </div>
     );
 }

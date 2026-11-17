@@ -25,7 +25,8 @@ export const CAMARA = {
     /** Hacia dónde mira: un poco arriba y adelante del personaje. */
     mirarAltura: 1.5,
     mirarAdelante: 2.4,
-    inclinacionMin: -0.35,
+    /** Casi horizontal: más abajo la cámara rozaba el piso y mostraba sobre todo cielo (la puntería es plana). */
+    inclinacionMin: 0.02,
     inclinacionMax: 0.55,
     sensibilidad: 0.0022,
     campoVision: 62,

@@ -75,26 +75,36 @@ export async function entrarSala(): Promise<Sala | null> {
             });
     });
 
-    if (!conectado) {
+    // pusher-js manda los mensajes en el siguiente ciclo (setTimeout 0) pero cierra el socket al instante: si se
+    // desconecta en el mismo ciclo que la baja del canal (o que el último whisper), ese envío cae sobre un socket
+    // que ya se está cerrando («WebSocket is already in CLOSING or CLOSED state»). Se desconecta después.
+    let cerrada = false;
+    const cerrar = () => {
+        if (cerrada) return;
+        cerrada = true;
+        avisos.length = 0;
         echo.leave('arena');
-        echo.disconnect();
+        window.setTimeout(() => echo.disconnect(), 60);
+    };
+
+    if (!conectado) {
+        cerrar();
         return null;
     }
 
     return {
         miembros: () => lista,
         alCambiarMiembros: (fn) => {
-            avisos.push(fn);
+            if (!cerrada) avisos.push(fn);
         },
         enviar: (evento, datos) => {
+            // Nada sale por la sala después de dejarla.
+            if (cerrada) return;
             canal.whisper(evento, datos);
         },
         escuchar: (evento, fn) => {
             canal.listenForWhisper(evento, fn as Oyente);
         },
-        salir: () => {
-            echo.leave('arena');
-            echo.disconnect();
-        },
+        salir: cerrar,
     };
 }
