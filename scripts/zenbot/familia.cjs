@@ -55,6 +55,10 @@ async function verificarIdentidad(pagina) {
         const url = pagina.url();
         if (!url.startsWith('https://accounts.google.com/')) return;
 
+        // Captcha («No soy un robot») u otra prueba de que hay una persona: eso lo hace siempre una persona, en el visor.
+        const captcha = /recaptcha|challenge\/(recaptcha|dp|ipe)/.test(url) || (await pagina.locator('iframe[src*="recaptcha"], iframe[title*="reCAPTCHA"]').count().catch(() => 0)) > 0;
+        if (captcha) throw falla('requiere_persona', new URL(url).pathname);
+
         if (/challenge\/pwd/.test(url)) {
             if (!CLAVE) throw falla('falta_contrasena');
             const campo = pagina.locator('input[type=password]').first();
@@ -70,7 +74,7 @@ async function verificarIdentidad(pagina) {
             await campo.pressSequentially(codigo2fa(SECRETO_2FA), { delay: 60 });
             await campo.press('Enter');
         } else if (/challenge\/selection|challenge\/ootp|challenge\/az|challenge\/ipp|challenge\/sk/.test(url)) {
-            throw falla('verificacion_distinta');
+            throw falla('verificacion_distinta', new URL(url).pathname);
         } else if (/signin\/(v2\/)?(identifier|rejected)|deniedsigninrejected/.test(url)) {
             throw falla('sin_sesion');
         }
@@ -79,11 +83,11 @@ async function verificarIdentidad(pagina) {
         await pagina.waitForTimeout(1500);
         if (pagina.url() === url) {
             const texto = (await pagina.innerText('body').catch(() => '')).toLowerCase();
-            throw falla(/incorrect|wrong|erróne|equivocad/.test(texto) ? 'verificacion_rechazada' : 'verificacion_atorada');
+            throw falla(/incorrect|wrong|erróne|equivocad/.test(texto) ? 'verificacion_rechazada' : 'verificacion_atorada', new URL(url).pathname);
         }
     }
 
-    if (pagina.url().startsWith('https://accounts.google.com/')) throw falla('verificacion_atorada');
+    if (pagina.url().startsWith('https://accounts.google.com/')) throw falla('verificacion_atorada', new URL(pagina.url()).pathname);
 }
 
 // ——— Un Chrome por cuenta ———————————————————————————————————————————————————————————————
@@ -150,7 +154,8 @@ const salir = async (dato, codigo = 0) => {
     process.stdout.write(JSON.stringify(dato));
     process.exit(codigo);
 };
-const falla = (codigo) => Object.assign(new Error(codigo), { codigo });
+// `detalle`: en qué pantalla de Google se quedó (solo la ruta, sin parámetros ni datos), para diagnosticar.
+const falla = (codigo, detalle = null) => Object.assign(new Error(codigo), { codigo, detalle });
 
 /** Abre una página de la cuenta y espera `listo`. Si Google manda a iniciar sesión, avisa. */
 async function abrir(pagina, ruta, listo = 'body') {
@@ -299,6 +304,15 @@ async function sacar(pagina, correo) {
 
         return await salir({ ok: false, error: 'accion_invalida' }, 2);
     } catch (e) {
-        return await salir({ ok: false, error: e.codigo || String(e.message || e).slice(0, 200) }, 1);
+        // Si Google pide algo que debe hacer una persona, el Chrome se queda abierto en esa pantalla para el visor.
+        if (['requiere_persona', 'verificacion_distinta', 'verificacion_atorada', 'verificacion_rechazada'].includes(e.codigo)) {
+            const actual = leerEstado();
+            if (actual && actual.correo === ESPERADO) guardarEstado({ ...actual, visor: true, desde: Date.now() });
+            alSalir = null;
+            await pagina.bringToFront().catch(() => {});
+            pestana = null;
+        }
+
+        return await salir({ ok: false, error: e.codigo || String(e.message || e).slice(0, 200), detalle: e.detalle || null }, 1);
     }
 })();

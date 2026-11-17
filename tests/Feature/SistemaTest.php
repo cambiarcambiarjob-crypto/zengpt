@@ -13,6 +13,7 @@ use App\Support\Hoy;
 use App\Support\Presentar;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Process;
@@ -510,5 +511,23 @@ class SistemaTest extends TestCase
         // Los espacios de las ligas quedan libres para agregar clientes.
         $this->assertSame(4, Presentar::cuenta($cuenta)['libres']);
         $this->assertFalse(GrupoGoogle::esCorreoDeLigas('otro@gmail.com'));
+    }
+
+    public function test_si_el_servidor_esta_ocupado_la_revision_avisa_sin_tronar(): void
+    {
+        config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com']]);
+        $cuenta = $this->cuenta(['email' => 'admin.grupo@gmail.com']);
+        Process::fake();
+        $ocupado = Cache::lock('zenbot-navegador', 60);
+        $ocupado->get();
+
+        config(['zengpt.google.espera' => 1]);
+        try {
+            $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('error', 'El servidor está ocupado con otra cuenta; intenta en unos segundos.');
+            $this->artisan('google:revisar')->assertSuccessful();
+        } finally {
+            $ocupado->release();
+        }
+        Process::assertNothingRan();
     }
 }

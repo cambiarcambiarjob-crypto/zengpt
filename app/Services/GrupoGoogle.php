@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Models\Account;
 use App\Models\Slot;
 use App\Support\Hoy;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
@@ -219,7 +221,9 @@ class GrupoGoogle
         }
 
         $lock = Cache::lock('zenbot-navegador', $segundos + 10);
-        if (! $lock->block(15)) {
+        try {
+            $lock->block((int) config('zengpt.google.espera', 15));
+        } catch (LockTimeoutException) {
             throw new RuntimeException('El servidor está ocupado con otra cuenta; intenta en unos segundos.');
         }
 
@@ -242,6 +246,10 @@ class GrupoGoogle
         }
 
         if (! ($datos['ok'] ?? false)) {
+            if (filled($datos['detalle'] ?? null)) {
+                Log::info("zenbot {$account->email}: {$datos['error']} en {$datos['detalle']}");
+            }
+
             throw new RuntimeException(code: ($datos['error'] ?? '') === 'no_encontrado' ? self::NO_ENCONTRADO : 0, message: match ($datos['error'] ?? '') {
                 'sin_sesion' => 'Google cerró la sesión del servidor: entra con «Abrir visor» en la cuenta.',
                 'sin_navegador' => 'El Chrome del servidor no arrancó. Intenta de nuevo en un momento.',
@@ -253,9 +261,10 @@ class GrupoGoogle
                 'lectura_incompleta' => 'Google tardó en cargar el grupo. Intenta de nuevo en un momento.',
                 'falta_contrasena' => 'Google pidió confirmar la contraseña: guárdala en la cuenta (Editar cuenta) y vuelve a intentar.',
                 'falta_2fa' => 'Google pidió el código de 2 pasos: guarda la liga de 2FA en la cuenta y vuelve a intentar.',
-                'verificacion_rechazada' => 'Google rechazó la contraseña o el código 2FA guardados en la cuenta. Revísalos.',
-                'verificacion_distinta' => 'Google pidió otra forma de verificación (teléfono o app). Hay que hacerlo a mano en el servidor.',
-                'verificacion_atorada' => 'Google no aceptó la verificación automática. Intenta de nuevo o hazlo a mano en el servidor.',
+                'requiere_persona' => 'Google pidió confirmar que eres una persona (captcha). Quedó abierto: entra con «Abrir visor», resuélvelo y vuelve a intentar.',
+                'verificacion_rechazada' => 'Google rechazó la contraseña o el código 2FA guardados en la cuenta. Revísalos; quedó abierto en «Abrir visor».',
+                'verificacion_distinta' => 'Google pidió otra forma de verificación (teléfono o app). Quedó abierto: termínalo en «Abrir visor» y vuelve a intentar.',
+                'verificacion_atorada' => 'Google no aceptó la verificación automática. Quedó abierto: termínalo en «Abrir visor» y vuelve a intentar.',
                 default => 'Google no respondió como se esperaba. Intenta de nuevo en un momento.',
             });
         }

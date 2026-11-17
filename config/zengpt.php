@@ -32,6 +32,8 @@ return [
         // Correos a los que se mandan invitaciones solo para sacar ligas y pasárselas a clientes (no son clientes).
         // Con Gmail cuentan también sus variantes con puntos o «+algo».
         'correos_ligas' => explode(',', (string) env('ZENBOT_CORREOS_LIGAS', '')),
+        // Segundos que una acción espera su turno si el Chrome está ocupado con otra cuenta.
+        'espera' => 15,
     ],
 
     /*
