@@ -1,6 +1,6 @@
 import cancionUrl from './musica-1.mp3';
 
-export type Pista = 'cancion' | 'tetris';
+export type Pista = 'cancion' | 'tetris' | 'polka';
 
 const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -21,8 +21,33 @@ const MELODIA: [number, number][] = [
 // Raíz del bajo por compás (Mi, La, Mi, La, Re, Do, Mi, La).
 const BAJO = [40, 45, 40, 45, 38, 36, 40, 45];
 
+/*
+ * Polka finlandesa tradicional («Ievan polkka», melodía popular) en versión chiptune, en La menor.
+ * Cuatro frases de 16 corcheas (4 compases de 2/4 cada una).
+ */
+const POLKA: [number, number][] = [
+    [64, 1], [69, 1], [69, 1], [71, 1], [72, 1], [71, 1], [69, 1], [69, 1], [67, 1], [69, 1], [71, 1], [67, 5],
+    [64, 1], [69, 1], [69, 1], [71, 1], [72, 1], [71, 1], [69, 1], [67, 1], [64, 8],
+    [72, 1], [74, 1], [76, 1], [76, 1], [74, 1], [72, 1], [71, 1], [72, 1], [74, 1], [71, 7],
+    [72, 1], [74, 1], [76, 1], [76, 1], [74, 1], [72, 1], [71, 1], [72, 1], [69, 8],
+];
+// Acorde por compás de 2/4: [raíz MIDI del bajo, menor?]. Am Am Em Em · Am Am E Am · C C G G · C G E Am
+const POLKA_ACORDES: [number, boolean][] = [
+    [45, true], [45, true], [40, true], [40, true],
+    [45, true], [45, true], [40, false], [45, true],
+    [48, false], [48, false], [43, false], [43, false],
+    [48, false], [43, false], [40, false], [45, true],
+];
+
+type Pieza = { corchea: number; melodia: [number, number][]; pasos: number };
+const PIEZAS: Record<'tetris' | 'polka', Pieza> = {
+    tetris: { corchea: 60 / 150 / 2, melodia: MELODIA, pasos: 64 },
+    polka: { corchea: 60 / 168 / 2, melodia: POLKA, pasos: 64 },
+};
+
 /**
- * Música del easter egg: la canción (archivo, en bucle) y una pieza estilo Tetris sintetizada con Web Audio,
+ * Música del easter egg: la canción (archivo, en bucle) y dos piezas chiptune sintetizadas con Web Audio (estilo
+ * Tetris y polka),
  * más los efectos de sonido. Todo pasa por un volumen general para silenciar con un botón.
  */
 export class Musica {
@@ -38,10 +63,9 @@ export class Musica {
     private nota = 0;
     private notaFin = 0;
     private pista: Pista | null = null;
+    private pieza: Pieza = PIEZAS.tetris;
     private pausada = false;
     silenciada = false;
-
-    private static readonly CORCHEA = 60 / 150 / 2;
 
     constructor() {
         // La canción empieza a descargarse en cuanto se abre el juego.
@@ -74,7 +98,7 @@ export class Musica {
         this.sinte.connect(this.general);
 
         this.eco = this.ctx.createDelay(1);
-        this.eco.delayTime.value = Musica.CORCHEA * 1.5;
+        this.eco.delayTime.value = PIEZAS.tetris.corchea * 1.5;
         const retro = this.ctx.createGain();
         retro.gain.value = 0.25;
         this.eco.connect(retro).connect(this.eco);
@@ -94,6 +118,8 @@ export class Musica {
             this.pararTetris();
             if (!this.pausada) void this.cancion.play().catch(() => {});
         } else {
+            this.pieza = PIEZAS[pista];
+            if (this.eco) this.eco.delayTime.value = this.pieza.corchea * 1.5;
             this.cancion.pause();
             this.corchea = 0;
             this.nota = 0;
@@ -184,27 +210,54 @@ export class Musica {
         this.temporizador = null;
     }
 
-    /** Programa por adelantado las corcheas de la pieza estilo Tetris. */
+    /** Programa por adelantado las corcheas de la pieza sintetizada (Tetris o polka). */
     private programar(): void {
         if (!this.ctx) return;
+        const { corchea, melodia, pasos } = this.pieza;
+        const esPolka = this.pieza === PIEZAS.polka;
+
         while (this.siguiente < this.ctx.currentTime + 0.15) {
             const t = this.siguiente;
-            const paso = this.corchea % 64;
+            const paso = this.corchea % pasos;
 
             if (paso === this.notaFin) {
-                const [nota, largo] = MELODIA[this.nota];
-                if (nota) this.melodia(t, midi(nota), largo * Musica.CORCHEA);
-                this.notaFin = (this.notaFin + largo) % 64;
-                this.nota = (this.nota + 1) % MELODIA.length;
+                const [nota, largo] = melodia[this.nota];
+                if (nota) this.melodia(t, midi(nota), largo * corchea);
+                this.notaFin = (this.notaFin + largo) % pasos;
+                this.nota = (this.nota + 1) % melodia.length;
             }
 
-            const raiz = BAJO[Math.floor(paso / 8)];
-            this.bajo(t, midi(paso % 2 === 0 ? raiz : raiz + 12));
-            if (paso % 4 === 0) this.bombo(t);
-            if (paso % 2 === 1) this.platillo(t);
+            if (esPolka) {
+                // «Um-pa» de polka: bajo en los tiempos y acorde corto en los contratiempos.
+                const [raiz, menor] = POLKA_ACORDES[Math.floor(paso / 4)];
+                if (paso % 2 === 0) this.bajo(t, midi(paso % 4 === 0 ? raiz : raiz + 7), corchea);
+                else this.acorde(t, raiz + 24, menor, corchea);
+                if (paso % 4 === 0) this.bombo(t);
+            } else {
+                const raiz = BAJO[Math.floor(paso / 8)];
+                this.bajo(t, midi(paso % 2 === 0 ? raiz : raiz + 12), corchea);
+                if (paso % 4 === 0) this.bombo(t);
+                if (paso % 2 === 1) this.platillo(t);
+            }
 
-            this.siguiente += Musica.CORCHEA;
+            this.siguiente += corchea;
             this.corchea += 1;
+        }
+    }
+
+    /** Acorde corto (tríada) en onda cuadrada suave: el «pa» de la polka. */
+    private acorde(t: number, raiz: number, menor: boolean, largo: number): void {
+        const ctx = this.ctx!;
+        for (const intervalo of [0, menor ? 3 : 4, 7]) {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'square';
+            o.frequency.value = midi(raiz + intervalo);
+            g.gain.setValueAtTime(0.035, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + largo * 0.6);
+            o.connect(g).connect(this.sinte!);
+            o.start(t);
+            o.stop(t + largo * 0.65);
         }
     }
 
@@ -225,17 +278,17 @@ export class Musica {
         o.stop(t + largo);
     }
 
-    private bajo(t: number, frecuencia: number): void {
+    private bajo(t: number, frecuencia: number, corchea: number): void {
         const ctx = this.ctx!;
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.type = 'triangle';
         o.frequency.value = frecuencia;
         g.gain.setValueAtTime(0.28, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + Musica.CORCHEA * 0.9);
+        g.gain.exponentialRampToValueAtTime(0.001, t + corchea * 0.9);
         o.connect(g).connect(this.sinte!);
         o.start(t);
-        o.stop(t + Musica.CORCHEA);
+        o.stop(t + corchea);
     }
 
     private bombo(t: number): void {

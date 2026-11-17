@@ -6,6 +6,8 @@ import StarBorder from '@/components/reactbits/StarBorder';
 import cabeza2Url from './cabeza-2.webp';
 import cabeza3Url from './cabeza-3.webp';
 import cabeza4Url from './cabeza-4.webp';
+import cabeza5Url from './cabeza-5.webp';
+import fondo5Url from './fondo-5.webp';
 import cabezaUrl from './cabeza.webp';
 import { Musica, type Pista } from './musica';
 
@@ -21,16 +23,17 @@ const COMIDAS_POR_NIVEL = 5;
 const PIEZAS = ['#22e5ff', '#ffe600', '#c84bff', '#3dff7a', '#ff3d5e', '#3d7bff', '#ff9a1f'];
 
 type Punto = { x: number; y: number };
-type Fondo = 'rejilla' | 'synthwave' | 'lluvia' | 'estrellas';
+type Fondo = 'rejilla' | 'synthwave' | 'lluvia' | 'estrellas' | 'imagen';
 type Tema = { cara: string; color: string; pista: Pista; fondo: Fondo };
 
-// Ciclo de 4 niveles: 1 león, 2 lentes, 3 traje, 4 blanco y negro (y vuelve a empezar en el 5).
-// Niveles 1–2 con la canción; 3–4 con la pieza estilo Tetris.
+// Ciclo de 5 niveles (en el 6 vuelve a empezar). Niveles 1–2 con la canción, 3–4 con la pieza estilo Tetris
+// y 5 con la polka chiptune sobre la imagen de fondo.
 const TEMAS: Tema[] = [
     { cara: cabezaUrl, color: '#22e5ff', pista: 'cancion', fondo: 'rejilla' },
     { cara: cabeza2Url, color: '#ff3dd8', pista: 'cancion', fondo: 'synthwave' },
     { cara: cabeza3Url, color: '#ff9a1f', pista: 'tetris', fondo: 'lluvia' },
     { cara: cabeza4Url, color: '#e8e8ff', pista: 'tetris', fondo: 'estrellas' },
+    { cara: cabeza5Url, color: '#39c5bb', pista: 'polka', fondo: 'imagen' },
 ];
 const temaDe = (nivel: number) => TEMAS[(nivel - 1) % TEMAS.length];
 const indiceTema = (nivel: number) => (nivel - 1) % TEMAS.length;
@@ -123,6 +126,7 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
     const onda = useRef<{ x: number; y: number; inicio: number; color: string } | null>(null);
     const lluvia = useRef<Pieza[]>([]);
     const estrellas = useRef<{ x: number; y: number; z: number }[]>([]);
+    const fondoImagen = useRef<HTMLImageElement | null>(null);
     const ultimoCuadro = useRef(0);
     const reducido = useRef(typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     const chispas = useRef<Chispa[]>([]);
@@ -185,6 +189,37 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
                 ctx.fillStyle = g;
                 ctx.fillRect(0, y - celda * 2, lado, celda * 4);
             }
+            return;
+        }
+
+        if (tema.fondo === 'imagen') {
+            // Imagen de fondo que «late» al ritmo de la polka, oscurecida para que la serpiente resalte.
+            const img = fondoImagen.current;
+            if (img?.complete && img.naturalWidth) {
+                const zoom = quieto ? 1 : 1.04 + 0.025 * Math.abs(Math.sin((t / 1000) * Math.PI * (168 / 60)));
+                const escala = Math.max(lado / img.naturalWidth, lado / img.naturalHeight) * zoom;
+                const w = img.naturalWidth * escala;
+                const h = img.naturalHeight * escala;
+                ctx.save();
+                ctx.globalAlpha = 0.4;
+                ctx.drawImage(img, (lado - w) / 2, (lado - h) / 2, w, h);
+                ctx.restore();
+            }
+            const velo = ctx.createRadialGradient(lado / 2, lado / 2, lado * 0.15, lado / 2, lado / 2, lado * 0.75);
+            velo.addColorStop(0, 'rgba(5,3,15,0.25)');
+            velo.addColorStop(1, 'rgba(5,3,15,0.8)');
+            ctx.fillStyle = velo;
+            ctx.fillRect(0, 0, lado, lado);
+            ctx.strokeStyle = 'rgba(57, 197, 187, 0.1)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 1; i < CELDAS; i++) {
+                ctx.moveTo(i * celda, 0);
+                ctx.lineTo(i * celda, lado);
+                ctx.moveTo(0, i * celda);
+                ctx.lineTo(lado, i * celda);
+            }
+            ctx.stroke();
             return;
         }
 
@@ -530,6 +565,9 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
             img.src = tema.cara;
             return img;
         });
+        const fondo = new Image();
+        fondo.src = fondo5Url;
+        fondoImagen.current = fondo;
         if (!musica.current) {
             musica.current = new Musica();
             musica.current.silenciada = leer(SILENCIO) === '1';
