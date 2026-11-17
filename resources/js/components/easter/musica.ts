@@ -88,7 +88,8 @@ export class Musica {
     private sinte: GainNode | null = null;
     private eco: DelayNode | null = null;
     private ruido: AudioBuffer | null = null;
-    private cancion: HTMLAudioElement;
+    private cancion: HTMLAudioElement | null = null;
+    private ultimoEfecto: Record<string, number> = {};
     private temporizador: number | null = null;
     private corchea = 0;
     private siguiente = 0;
@@ -99,11 +100,27 @@ export class Musica {
     private pausada = false;
     silenciada = false;
 
-    constructor() {
-        // La canción empieza a descargarse en cuanto se abre el juego.
-        this.cancion = new Audio(cancionUrl);
-        this.cancion.loop = true;
-        this.cancion.preload = 'auto';
+    /** `precargarCancion`: la canción (5 MB) empieza a descargarse ya; si no, solo cuando se pida. */
+    constructor(precargarCancion = true) {
+        if (precargarCancion) this.prepararCancion();
+    }
+
+    private prepararCancion(): HTMLAudioElement {
+        if (!this.cancion) {
+            this.cancion = new Audio(cancionUrl);
+            this.cancion.loop = true;
+            this.cancion.preload = 'auto';
+            if (this.ctx) this.conectarCancion();
+        }
+        return this.cancion;
+    }
+
+    private conectarCancion(): void {
+        if (!this.ctx || !this.general || !this.cancion) return;
+        const fuente = this.ctx.createMediaElementSource(this.cancion);
+        const volCancion = this.ctx.createGain();
+        volCancion.gain.value = 0.55;
+        fuente.connect(volCancion).connect(this.general);
     }
 
     /** Debe llamarse desde un gesto (tecla o toque): los navegadores no dejan sonar sin uno. */
@@ -120,10 +137,7 @@ export class Musica {
         this.general.gain.value = this.silenciada ? 0 : 1;
         this.general.connect(this.ctx.destination);
 
-        const fuente = this.ctx.createMediaElementSource(this.cancion);
-        const volCancion = this.ctx.createGain();
-        volCancion.gain.value = 0.55;
-        fuente.connect(volCancion).connect(this.general);
+        this.conectarCancion();
 
         this.sinte = this.ctx.createGain();
         this.sinte.gain.value = 0.3;
@@ -148,11 +162,12 @@ export class Musica {
 
         if (pista === 'cancion') {
             this.pararTetris();
-            if (!this.pausada) void this.cancion.play().catch(() => {});
+            const cancion = this.prepararCancion();
+            if (!this.pausada) void cancion.play().catch(() => {});
         } else {
             this.pieza = PIEZAS[pista];
             if (this.eco) this.eco.delayTime.value = this.pieza.corchea * 1.5;
-            this.cancion.pause();
+            this.cancion?.pause();
             this.corchea = 0;
             this.nota = 0;
             this.notaFin = 0;
@@ -165,11 +180,11 @@ export class Musica {
         this.pausada = pausada;
         if (!this.ctx) return;
         if (pausada) {
-            this.cancion.pause();
+            this.cancion?.pause();
             void this.ctx.suspend();
         } else {
             void this.ctx.resume();
-            if (this.pista === 'cancion') void this.cancion.play().catch(() => {});
+            if (this.pista === 'cancion') void this.cancion?.play().catch(() => {});
         }
     }
 
@@ -181,9 +196,11 @@ export class Musica {
 
     detener(): void {
         this.pararTetris();
-        this.cancion.pause();
-        this.cancion.removeAttribute('src');
-        this.cancion.load();
+        if (this.cancion) {
+            this.cancion.pause();
+            this.cancion.removeAttribute('src');
+            this.cancion.load();
+        }
         void this.ctx?.close();
         this.ctx = null;
         this.pista = null;
@@ -220,6 +237,96 @@ export class Musica {
             o.start(t + i * 0.07);
             o.stop(t + i * 0.07 + 0.17);
         });
+    }
+
+    /**
+     * Efectos del juego de zombies. Cada tipo tiene un mínimo de tiempo entre uno y otro para no saturar
+     * (p. ej. muchas balas por segundo).
+     */
+    efecto(tipo: 'disparo' | 'perdigon' | 'cañon' | 'impacto' | 'muerte' | 'dolor' | 'rugido' | 'laser' | 'curar' | 'torreta' | 'dash' | 'billetes' | 'oleada' | 'revivir', volumen = 1): void {
+        if (!this.ctx || !this.general) return;
+        const t = this.ctx.currentTime;
+        const minimo = { disparo: 0.05, perdigon: 0.08, cañon: 0.1, impacto: 0.04, muerte: 0.05 }[tipo as string] ?? 0.03;
+        if (t - (this.ultimoEfecto[tipo] ?? -1) < minimo) return;
+        this.ultimoEfecto[tipo] = t;
+
+        const tono = (forma: OscillatorType, de: number, a: number, largo: number, vol: number, retraso = 0) => {
+            const o = this.ctx!.createOscillator();
+            const g = this.ctx!.createGain();
+            o.type = forma;
+            o.frequency.setValueAtTime(de, t + retraso);
+            o.frequency.exponentialRampToValueAtTime(Math.max(20, a), t + retraso + largo);
+            g.gain.setValueAtTime(vol * volumen, t + retraso);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + retraso + largo);
+            o.connect(g).connect(this.general!);
+            o.start(t + retraso);
+            o.stop(t + retraso + largo + 0.02);
+        };
+        const ruido = (corte: number, largo: number, vol: number, tipoFiltro: BiquadFilterType = 'lowpass') => {
+            if (!this.ruido) return;
+            const f = this.ctx!.createBufferSource();
+            f.buffer = this.ruido;
+            const filtro = this.ctx!.createBiquadFilter();
+            filtro.type = tipoFiltro;
+            filtro.frequency.value = corte;
+            const g = this.ctx!.createGain();
+            g.gain.setValueAtTime(vol * volumen, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + largo);
+            f.connect(filtro).connect(g).connect(this.general!);
+            f.start(t);
+            f.stop(t + Math.min(0.29, largo + 0.02));
+        };
+
+        switch (tipo) {
+            case 'disparo':
+                tono('square', 900, 260, 0.06, 0.05);
+                break;
+            case 'perdigon':
+                ruido(2200, 0.12, 0.16);
+                tono('square', 300, 90, 0.08, 0.05);
+                break;
+            case 'cañon':
+                ruido(900, 0.2, 0.2);
+                tono('sawtooth', 160, 45, 0.18, 0.08);
+                break;
+            case 'impacto':
+                tono('triangle', 420, 160, 0.05, 0.05);
+                break;
+            case 'muerte':
+                ruido(700, 0.16, 0.12);
+                tono('sawtooth', 220, 55, 0.18, 0.05);
+                break;
+            case 'dolor':
+                tono('sawtooth', 200, 80, 0.2, 0.12);
+                break;
+            case 'rugido':
+                ruido(500, 0.28, 0.3);
+                tono('sawtooth', 110, 40, 0.5, 0.18);
+                break;
+            case 'laser':
+                tono('sawtooth', 1800, 300, 0.35, 0.1);
+                tono('square', 900, 150, 0.35, 0.05);
+                break;
+            case 'curar':
+                [0, 4, 7, 12].forEach((n, i) => tono('triangle', midi(72 + n), midi(72 + n), 0.18, 0.08, i * 0.06));
+                break;
+            case 'torreta':
+                tono('square', 300, 600, 0.12, 0.08);
+                tono('square', 600, 900, 0.1, 0.06, 0.1);
+                break;
+            case 'dash':
+                ruido(4000, 0.18, 0.14, 'highpass');
+                break;
+            case 'billetes':
+                for (let i = 0; i < 5; i++) tono('square', 1200 + i * 200, 1600 + i * 200, 0.05, 0.05, i * 0.03);
+                break;
+            case 'oleada':
+                [0, 3, 7, 12].forEach((n, i) => tono('square', midi(57 + n), midi(57 + n), 0.22, 0.08, i * 0.09));
+                break;
+            case 'revivir':
+                [0, 7, 12, 19].forEach((n, i) => tono('triangle', midi(64 + n), midi(64 + n), 0.2, 0.09, i * 0.07));
+                break;
+        }
     }
 
     perder(): void {

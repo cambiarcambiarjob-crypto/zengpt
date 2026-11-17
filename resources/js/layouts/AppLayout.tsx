@@ -11,8 +11,10 @@ import { cn } from '@/lib/cn';
 import { fechaLarga, iniciales } from '@/lib/formato';
 import type { Compartido, Usuario } from '@/types';
 
-// Easter egg: solo se descarga si alguien lo activa.
+// Easter eggs: solo se descargan si alguien los activa.
 const Serpiente = lazy(() => import('@/components/easter/Serpiente'));
+const ArenaZombies = lazy(() => import('@/components/easter/arena/ArenaZombies'));
+const MenuJuegos = lazy(() => import('@/components/easter/MenuJuegos'));
 
 interface Destino {
     href: string;
@@ -268,9 +270,11 @@ export default function AppLayout({ titulo, descripcion, acciones, ancho = 'norm
 
             <Avisos />
 
-            {serpiente.abierto && (
+            {serpiente.juego && (
                 <Suspense fallback={null}>
-                    <Serpiente alCerrar={serpiente.cerrar} />
+                    {serpiente.juego === 'snake' && <Serpiente alCerrar={serpiente.cerrar} />}
+                    {serpiente.juego === 'zombies' && <ArenaZombies alCerrar={serpiente.cerrar} />}
+                    {serpiente.juego === 'menu' && <MenuJuegos alElegir={serpiente.abrir} alCerrar={serpiente.cerrar} />}
                 </Suspense>
             )}
         </ClickSpark>

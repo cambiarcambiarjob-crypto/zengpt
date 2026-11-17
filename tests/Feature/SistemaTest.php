@@ -12,6 +12,7 @@ use App\Services\GrupoGoogle;
 use App\Support\Hoy;
 use App\Support\Presentar;
 use Database\Seeders\DatabaseSeeder;
+use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -529,5 +530,27 @@ class SistemaTest extends TestCase
             $ocupado->release();
         }
         Process::assertNothingRan();
+    }
+
+    public function test_la_sala_del_juego_de_zombies_solo_deja_entrar_a_usuarios_con_sesion(): void
+    {
+        config([
+            'broadcasting.default' => 'reverb',
+            'broadcasting.connections.reverb.key' => 'llave-prueba',
+            'broadcasting.connections.reverb.secret' => 'secreto-prueba',
+            'broadcasting.connections.reverb.app_id' => '1',
+        ]);
+        // Los canales se registran al arrancar con el driver de pruebas: se vuelven a registrar con Reverb.
+        app(BroadcastManager::class)->forgetDrivers();
+        require base_path('routes/channels.php');
+        $datos = ['socket_id' => '1234.5678', 'channel_name' => 'presence-arena'];
+
+        $this->post('/broadcasting/auth', $datos)->assertForbidden();
+
+        $respuesta = $this->actingAs($this->socio)->post('/broadcasting/auth', $datos)->assertOk();
+        $canal = json_decode($respuesta->json('channel_data'), true);
+        $this->assertSame((string) $this->socio->id, (string) $canal['user_id']);
+        $this->assertSame($this->socio->name, $canal['user_info']['nombre']);
+        $this->assertStringStartsWith('llave-prueba:', $respuesta->json('auth'));
     }
 }
