@@ -1,6 +1,6 @@
 import cancionUrl from './musica-1.mp3';
 
-export type Pista = 'cancion' | 'tetris' | 'polka';
+export type Pista = 'cancion' | 'tetris' | 'polka' | 'caricatura' | 'robots';
 
 const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -39,10 +39,42 @@ const POLKA_ACORDES: [number, boolean][] = [
     [48, false], [43, false], [40, false], [45, true],
 ];
 
-type Pieza = { corchea: number; melodia: [number, number][]; pasos: number };
-const PIEZAS: Record<'tetris' | 'polka', Pieza> = {
-    tetris: { corchea: 60 / 150 / 2, melodia: MELODIA, pasos: 64 },
-    polka: { corchea: 60 / 168 / 2, melodia: POLKA, pasos: 64 },
+/*
+ * Composiciones ORIGINALES para el juego (no copian ninguna canción con derechos):
+ * «caricatura»: rock de 8 bits con aire de caricatura ochentera, en Mi menor.
+ * «robots»: himno épico con galope de bajo, en Do menor.
+ */
+const CARICATURA: [number, number][] = [
+    [76, 1], [76, 1], [79, 1], [76, 1], [81, 2], [79, 1], [76, 1],
+    [74, 1], [76, 1], [74, 1], [71, 1], [74, 2], [76, 2],
+    [76, 1], [76, 1], [79, 1], [76, 1], [81, 2], [83, 1], [81, 1],
+    [79, 2], [76, 2], [74, 1], [76, 3],
+    [72, 1], [72, 1], [76, 1], [72, 1], [79, 2], [81, 1], [79, 1],
+    [74, 1], [74, 1], [78, 1], [74, 1], [81, 2], [79, 1], [78, 1],
+    [76, 1], [79, 1], [83, 1], [88, 1], [86, 2], [83, 2],
+    [88, 4], [83, 2], [0, 2],
+];
+const CARICATURA_BAJO = [40, 40, 40, 40, 36, 38, 40, 40];
+
+const ROBOTS: [number, number][] = [
+    [72, 2], [79, 2], [77, 1], [75, 1], [74, 1], [75, 1],
+    [72, 6], [0, 2],
+    [68, 2], [75, 2], [74, 1], [72, 1], [70, 1], [72, 1],
+    [67, 6], [0, 2],
+    [72, 2], [79, 2], [80, 2], [79, 1], [77, 1],
+    [75, 2], [77, 2], [79, 4],
+    [80, 2], [79, 1], [77, 1], [75, 2], [74, 2],
+    [72, 6], [0, 2],
+];
+const ROBOTS_BAJO = [36, 36, 32, 31, 36, 39, 32, 31];
+
+type Ritmo = 'tetris' | 'polka' | 'rock' | 'epica';
+type Pieza = { corchea: number; melodia: [number, number][]; pasos: number; ritmo: Ritmo; bajo: number[]; octava?: boolean };
+const PIEZAS: Record<Exclude<Pista, 'cancion'>, Pieza> = {
+    tetris: { corchea: 60 / 150 / 2, melodia: MELODIA, pasos: 64, ritmo: 'tetris', bajo: BAJO },
+    polka: { corchea: 60 / 168 / 2, melodia: POLKA, pasos: 64, ritmo: 'polka', bajo: [] },
+    caricatura: { corchea: 60 / 152 / 2, melodia: CARICATURA, pasos: 64, ritmo: 'rock', bajo: CARICATURA_BAJO },
+    robots: { corchea: 60 / 132 / 2, melodia: ROBOTS, pasos: 64, ritmo: 'epica', bajo: ROBOTS_BAJO, octava: true },
 };
 
 /**
@@ -213,8 +245,7 @@ export class Musica {
     /** Programa por adelantado las corcheas de la pieza sintetizada (Tetris o polka). */
     private programar(): void {
         if (!this.ctx) return;
-        const { corchea, melodia, pasos } = this.pieza;
-        const esPolka = this.pieza === PIEZAS.polka;
+        const { corchea, melodia, pasos, ritmo, bajo, octava } = this.pieza;
 
         while (this.siguiente < this.ctx.currentTime + 0.15) {
             const t = this.siguiente;
@@ -222,19 +253,36 @@ export class Musica {
 
             if (paso === this.notaFin) {
                 const [nota, largo] = melodia[this.nota];
-                if (nota) this.melodia(t, midi(nota), largo * corchea);
+                if (nota) {
+                    this.melodia(t, midi(nota), largo * corchea);
+                    // El himno épico dobla la melodía una octava abajo para sonar más grande.
+                    if (octava) this.melodia(t, midi(nota - 12), largo * corchea, 0.08);
+                }
                 this.notaFin = (this.notaFin + largo) % pasos;
                 this.nota = (this.nota + 1) % melodia.length;
             }
 
-            if (esPolka) {
+            if (ritmo === 'polka') {
                 // «Um-pa» de polka: bajo en los tiempos y acorde corto en los contratiempos.
                 const [raiz, menor] = POLKA_ACORDES[Math.floor(paso / 4)];
                 if (paso % 2 === 0) this.bajo(t, midi(paso % 4 === 0 ? raiz : raiz + 7), corchea);
                 else this.acorde(t, raiz + 24, menor, corchea);
                 if (paso % 4 === 0) this.bombo(t);
+            } else if (ritmo === 'rock') {
+                // Bajo de rock a corcheas, bombo en 1 y 3, tarola en 2 y 4, hi-hat constante.
+                const raiz = bajo[Math.floor(paso / 8)];
+                this.bajo(t, midi(paso % 8 === 6 ? raiz + 12 : raiz), corchea);
+                if (paso % 8 === 0 || paso % 8 === 4) this.bombo(t);
+                if (paso % 8 === 2 || paso % 8 === 6) this.tarola(t);
+                this.platillo(t);
+            } else if (ritmo === 'epica') {
+                // Galope de bajo y tambores grandes.
+                const raiz = bajo[Math.floor(paso / 8)];
+                this.bajo(t, midi(paso % 4 === 3 ? raiz + 7 : raiz), corchea);
+                if (paso % 8 === 0 || paso % 8 === 3 || paso % 8 === 4) this.bombo(t);
+                if (paso % 8 === 2 || paso % 8 === 6) this.tarola(t);
             } else {
-                const raiz = BAJO[Math.floor(paso / 8)];
+                const raiz = bajo[Math.floor(paso / 8)];
                 this.bajo(t, midi(paso % 2 === 0 ? raiz : raiz + 12), corchea);
                 if (paso % 4 === 0) this.bombo(t);
                 if (paso % 2 === 1) this.platillo(t);
@@ -261,15 +309,15 @@ export class Musica {
         }
     }
 
-    private melodia(t: number, frecuencia: number, largo: number): void {
+    private melodia(t: number, frecuencia: number, largo: number, volumen = 0.16): void {
         const ctx = this.ctx!;
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.type = 'square';
         o.frequency.value = frecuencia;
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.16, t + 0.01);
-        g.gain.setValueAtTime(0.16, t + largo * 0.7);
+        g.gain.exponentialRampToValueAtTime(volumen, t + 0.01);
+        g.gain.setValueAtTime(volumen, t + largo * 0.7);
         g.gain.exponentialRampToValueAtTime(0.0001, t + largo * 0.95);
         o.connect(g);
         g.connect(this.sinte!);
@@ -302,6 +350,22 @@ export class Musica {
         o.connect(g).connect(this.sinte!);
         o.start(t);
         o.stop(t + 0.22);
+    }
+
+    /** Tarola: ruido con filtro de banda y un golpe tonal corto. */
+    private tarola(t: number): void {
+        const ctx = this.ctx!;
+        const f = ctx.createBufferSource();
+        f.buffer = this.ruido;
+        const filtro = ctx.createBiquadFilter();
+        filtro.type = 'bandpass';
+        filtro.frequency.value = 1800;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.22, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        f.connect(filtro).connect(g).connect(this.sinte!);
+        f.start(t);
+        f.stop(t + 0.13);
     }
 
     private platillo(t: number): void {

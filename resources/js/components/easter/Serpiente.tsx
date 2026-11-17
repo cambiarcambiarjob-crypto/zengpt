@@ -26,13 +26,13 @@ type Punto = { x: number; y: number };
 type Fondo = 'rejilla' | 'synthwave' | 'lluvia' | 'estrellas' | 'imagen';
 type Tema = { cara: string; color: string; pista: Pista; fondo: Fondo };
 
-// Ciclo de 5 niveles (en el 6 vuelve a empezar). Niveles 1–2 con la canción, 3–4 con la pieza estilo Tetris
-// y 5 con la polka chiptune sobre la imagen de fondo.
+// Ciclo de 5 niveles (en el 6 vuelve a empezar), cada uno con su cara, fondo y música:
+// 1 caricatura ochentera (original) · 2 la canción · 3 himno de robots (original) · 4 Tetris · 5 polka.
 const TEMAS: Tema[] = [
-    { cara: cabezaUrl, color: '#22e5ff', pista: 'cancion', fondo: 'rejilla' },
+    { cara: cabezaUrl, color: '#22e5ff', pista: 'caricatura', fondo: 'rejilla' },
     { cara: cabeza2Url, color: '#ff3dd8', pista: 'cancion', fondo: 'synthwave' },
-    { cara: cabeza3Url, color: '#ff9a1f', pista: 'tetris', fondo: 'lluvia' },
-    { cara: cabeza4Url, color: '#e8e8ff', pista: 'tetris', fondo: 'estrellas' },
+    { cara: cabeza3Url, color: '#e8e8ff', pista: 'robots', fondo: 'estrellas' },
+    { cara: cabeza4Url, color: '#ff9a1f', pista: 'tetris', fondo: 'lluvia' },
     { cara: cabeza5Url, color: '#39c5bb', pista: 'polka', fondo: 'imagen' },
 ];
 const temaDe = (nivel: number) => TEMAS[(nivel - 1) % TEMAS.length];
@@ -132,6 +132,13 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
     const chispas = useRef<Chispa[]>([]);
     const sacudida = useRef(0);
     const [avisoNivel, setAvisoNivel] = useState<number | null>(null);
+    // Zona que se ve (cambia a la mitad del giro 3D, no en cuanto sube el nivel).
+    const nivelVisible = useRef(1);
+    const [zona, setZona] = useState(1);
+    const transicion = useRef<{ medio: number; hasta: number; aplicado: boolean; aplicar: () => void; terminar: () => void } | null>(null);
+    // Brillo de cada casilla del tablero (0 → 1): rastro de la serpiente y destellos al ritmo.
+    const celdasBrillo = useRef(new Float32Array(CELDAS * CELDAS));
+    const proximoDestello = useRef(0);
 
     const [vista, setVista] = useState({ fase: 'inicio' as Fase, puntos: 0, nivel: 1, largo: 3, siguiente: estado.current.siguiente });
     const [record, setRecord] = useState(() => Number(leer(RECORD) ?? 0));
@@ -294,7 +301,7 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
             const lado = c.width;
             const celda = lado / CELDAS;
             const e = estado.current;
-            const tema = temaDe(e.nivel);
+            const tema = temaDe(nivelVisible.current);
             const brillo = reducido.current ? 1 : 0.85 + 0.15 * Math.sin(t / 260);
             const dt = Math.min(0.05, (t - (ultimoCuadro.current || t)) / 1000);
             ultimoCuadro.current = t;
@@ -309,6 +316,34 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
             }
 
             dibujarFondo(ctx, lado, celda, t, dt, tema);
+
+            // Casillas que brillan: más destellos, más fuerza y rastro más largo entre más alto el nivel.
+            const nivelV = nivelVisible.current;
+            const brillos = celdasBrillo.current;
+            if (!reducido.current && fase.current === 'jugando' && t > proximoDestello.current) {
+                proximoDestello.current = t + 420;
+                const cuantos = Math.min(16, 1 + nivelV * 2);
+                for (let i = 0; i < cuantos; i++) {
+                    const k = Math.floor(Math.random() * brillos.length);
+                    brillos[k] = Math.max(brillos[k], 0.55);
+                }
+            }
+            const apagado = dt * Math.max(0.45, 1.8 - nivelV * 0.22);
+            const fuerza = Math.min(0.8, 0.32 + nivelV * 0.09);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = tema.color;
+            for (let i = 0; i < brillos.length; i++) {
+                const v = brillos[i];
+                if (v < 0.02) {
+                    brillos[i] = 0;
+                    continue;
+                }
+                ctx.globalAlpha = v * fuerza * 0.5;
+                ctx.fillRect((i % CELDAS) * celda + 1, Math.floor(i / CELDAS) * celda + 1, celda - 2, celda - 2);
+                brillos[i] = Math.max(0, v - apagado);
+            }
+            ctx.restore();
 
             // Comida: bloque de Tetris con bisel, que late.
             const latido = reducido.current ? 0 : Math.sin(t / 180) * 1.5;
@@ -351,7 +386,7 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
                 for (let i = 1; i < puntos.length; i++) ctx.lineTo(puntos[i].x, puntos[i].y);
                 ctx.stroke();
                 ctx.shadowBlur = 0;
-                const desfase = indiceTema(e.nivel) * 50;
+                const desfase = indiceTema(nivelVisible.current) * 50;
                 for (let i = puntos.length - 1; i >= 1; i--) {
                     const hue = (300 - (i / Math.max(1, puntos.length - 1)) * 120 + desfase) % 360;
                     ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
@@ -381,7 +416,7 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
             ctx.beginPath();
             ctx.roundRect(cx, cy, tamCabeza, tamCabeza, tamCabeza * 0.28);
             ctx.clip();
-            const foto = imagenes.current[indiceTema(e.nivel)];
+            const foto = imagenes.current[indiceTema(nivelVisible.current)];
             if (foto?.complete) ctx.drawImage(foto, cx, cy, tamCabeza, tamCabeza);
             else {
                 ctx.fillStyle = tema.color;
@@ -453,15 +488,48 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
         refrescar();
     }, [refrescar]);
 
-    /** Aviso «NIVEL N», onda expansiva, fanfarria y la música del nuevo tema. */
+    /**
+     * Cambio de zona: el tablero gira en 3D y se va al fondo; a la mitad del giro cambian cara, fondo y música,
+     * y al terminar llegan el aviso «NIVEL N», la onda expansiva y un destello de todas las casillas.
+     * El juego se congela durante el giro. Con «menos movimiento» el cambio es directo.
+     */
     const alSubirNivel = useCallback(() => {
-        const e = estado.current;
-        const tema = temaDe(e.nivel);
-        setAvisoNivel(e.nivel);
-        window.setTimeout(() => setAvisoNivel(null), 1300);
-        if (!reducido.current) onda.current = { x: e.cuerpo[0].x + 0.5, y: e.cuerpo[0].y + 0.5, inicio: performance.now(), color: tema.color };
+        const nivel = estado.current.nivel;
         musica.current?.subir();
-        musica.current?.tocar(tema.pista);
+
+        const aplicar = () => {
+            nivelVisible.current = nivel;
+            setZona(nivel);
+            musica.current?.tocar(temaDe(nivel).pista);
+        };
+        const terminarCambio = () => {
+            setAvisoNivel(nivel);
+            window.setTimeout(() => setAvisoNivel(null), 1300);
+            if (!reducido.current) {
+                const h = estado.current.cuerpo[0];
+                onda.current = { x: h.x + 0.5, y: h.y + 0.5, inicio: performance.now(), color: temaDe(nivel).color };
+                celdasBrillo.current.fill(0.85);
+            }
+        };
+
+        if (reducido.current || !caja.current) {
+            aplicar();
+            terminarCambio();
+            return;
+        }
+
+        const DURACION = 1100;
+        const ahora = performance.now();
+        transicion.current = { medio: ahora + DURACION / 2, hasta: ahora + DURACION, aplicado: false, aplicar, terminar: terminarCambio };
+        caja.current.animate(
+            [
+                { transform: 'perspective(1100px) rotateY(0deg) rotateX(0deg) translateZ(0px) scale(1)', filter: 'brightness(1)' },
+                { transform: 'perspective(1100px) rotateY(90deg) rotateX(14deg) translateZ(-280px) scale(0.78)', filter: 'brightness(2.4)', offset: 0.5 },
+                { transform: 'perspective(1100px) rotateY(-90deg) rotateX(-14deg) translateZ(-280px) scale(0.78)', filter: 'brightness(2.4)', offset: 0.5001 },
+                { transform: 'perspective(1100px) rotateY(0deg) rotateX(0deg) translateZ(0px) scale(1)', filter: 'brightness(1)' },
+            ],
+            { duration: DURACION, easing: 'cubic-bezier(0.65, 0, 0.35, 1)' },
+        );
     }, []);
 
     const avanzar = useCallback(() => {
@@ -482,6 +550,7 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
         }
 
         e.cuerpo = [cabeza, ...cuerpo];
+        celdasBrillo.current[cabeza.y * CELDAS + cabeza.x] = 1;
         if (come) {
             const nivelAntes = e.nivel;
             if (!reducido.current) {
@@ -505,7 +574,7 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
 
     /** Truco (Shift + N): sube un nivel sin sumar puntos, para ver todos los temas. */
     const saltarNivel = useCallback(() => {
-        if (fase.current !== 'jugando') return;
+        if (fase.current !== 'jugando' || transicion.current) return;
         const e = estado.current;
         e.nivel += 1;
         e.comidas = (e.nivel - 1) * COMIDAS_POR_NIVEL;
@@ -525,6 +594,11 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
         musica.current.pausar(false);
         musica.current.tocar(temaDe(1).pista);
         onda.current = null;
+        transicion.current = null;
+        nivelVisible.current = 1;
+        setZona(1);
+        celdasBrillo.current.fill(0);
+        caja.current?.getAnimations().forEach((a) => a.cancel());
         refrescar();
     }, [refrescar]);
 
@@ -581,7 +655,18 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
         let alfa = 1;
         const ciclo = (t: number) => {
             const intervalo = intervaloDe(estado.current.nivel);
-            if (fase.current === 'jugando') {
+            const tr = transicion.current;
+            if (tr) {
+                if (!tr.aplicado && t >= tr.medio) {
+                    tr.aplicado = true;
+                    tr.aplicar();
+                }
+                if (t >= tr.hasta) {
+                    transicion.current = null;
+                    tr.terminar();
+                }
+            }
+            if (fase.current === 'jugando' && !transicion.current) {
                 if (t - ultimo >= intervalo) {
                     // Paso fijo; si el navegador se atrasó mucho, no acumula pasos de golpe.
                     ultimo = t - Math.min(intervalo, t - ultimo - intervalo);
@@ -590,9 +675,9 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
                 // Qué tanto va el paso actual (0 → 1): la serpiente se dibuja entre una casilla y la siguiente.
                 alfa = Math.min(1, (t - ultimo) / intervalo);
             } else {
-                // En pausa se queda donde iba; al reanudar sigue desde ahí.
+                // En pausa o durante el giro se queda donde iba; al seguir continúa desde ahí.
                 ultimo = t - alfa * intervalo;
-                if (fase.current !== 'pausa') alfa = 1;
+                if (fase.current !== 'pausa' && fase.current !== 'jugando') alfa = 1;
             }
             dibujar(t, alfa);
             id = requestAnimationFrame(ciclo);
@@ -694,11 +779,11 @@ export default function Serpiente({ alCerrar }: { alCerrar: () => void }) {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Juego Snake">
             <div className="flex max-h-full w-full max-w-[920px] flex-col gap-3 border border-[#7a4bff]/50 bg-[#07051a] p-3 shadow-[0_0_40px_rgba(122,75,255,0.35)] sm:flex-row sm:p-4" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>
-                <div ref={caja} className="relative aspect-square w-full min-w-0 sm:w-[min(70vh,600px)] sm:flex-none">
+                <div ref={caja} className="relative aspect-square w-full min-w-0 will-change-transform sm:w-[min(70vh,600px)] sm:flex-none" style={{ transformStyle: 'preserve-3d' }}>
                     <canvas
                         ref={lienzo}
                         className="block touch-none border transition-[border-color,box-shadow] duration-700"
-                        style={{ borderColor: `${temaDe(vista.nivel).color}80`, boxShadow: `0 0 26px ${temaDe(vista.nivel).color}40` }}
+                        style={{ borderColor: `${temaDe(zona).color}80`, boxShadow: `0 0 26px ${temaDe(zona).color}40` }}
                     />
                     {/* Líneas de monitor retro (solo CSS). */}
                     <div className="pointer-events-none absolute inset-0 opacity-[0.13]" style={{ background: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.5) 0 1px, transparent 1px 3px)' }} aria-hidden="true" />
