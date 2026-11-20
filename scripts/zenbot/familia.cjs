@@ -324,10 +324,43 @@ async function sacar(pagina, correo) {
 const PROGRESO = path.join(PERFILES, `.progreso-${ESPERADO.replace(/[^a-z0-9@._-]/g, '_')}.json`);
 const avisarProgreso = (datos) => { try { fs.writeFileSync(PROGRESO, JSON.stringify({ ...datos, actualizado: Date.now() })); } catch {} };
 
+const VOLVER_AL_GRUPO = /^(Ver (el )?grupo( familiar)?|Ir al grupo( familiar)?|Volver al grupo( familiar)?|Seguir|Continuar|Listo|Hecho)$/i;
+
 /**
- * Saca del grupo familiar a todos los miembros menos al administrador, uno por uno (si Google pide confirmar la
- * identidad, usa la contraseña y el 2FA de la cuenta). Si algo necesita a una persona (captcha, otra verificación),
- * se detiene y deja la pantalla ahí para el visor. Al final vuelve a leer el grupo para confirmar.
+ * Después de quitar a alguien, Google muestra una pantalla con «Ver grupo familiar» / «Seguir»: se le da clic ahí para
+ * volver al grupo SIN abrir otra dirección (así Google no vuelve a pedir la contraseña ni el código con el siguiente).
+ */
+async function volverAlGrupo(pagina) {
+    await pagina.waitForLoadState('domcontentloaded').catch(() => {});
+    const boton = pagina.getByRole('button', { name: VOLVER_AL_GRUPO }).or(pagina.getByRole('link', { name: VOLVER_AL_GRUPO })).first();
+    if (await boton.waitFor({ state: 'visible', timeout: 10000 }).then(() => true).catch(() => false)) {
+        await boton.click();
+        await pagina.waitForLoadState('domcontentloaded').catch(() => {});
+        await pagina.waitForSelector('a[href*="family/member/"]', { timeout: 20000 }).catch(() => {});
+        await pagina.waitForTimeout(1500);
+    }
+    // Si Google no mostró ese botón, se abre el grupo (puede volver a pedir el código: se pone solo).
+    if (!/family\/details/.test(pagina.url())) await abrir(pagina, 'family/details', 'a[href*="family/member/"]');
+}
+
+/** Desde la página del grupo, entra al miembro con un clic (sin abrir otra dirección, para no perder la verificación). */
+async function entrarAlMiembro(pagina, miembro) {
+    const id = String(miembro.href).split('?')[0].split('/').filter(Boolean).pop();
+    const liga = pagina.locator(`a[href*="family/member/"][href*="${id}"]`).first();
+    if (await liga.count().catch(() => 0)) {
+        await liga.click();
+        await pagina.waitForLoadState('domcontentloaded').catch(() => {});
+        await pagina.waitForSelector('button', { timeout: 20000 });
+    } else {
+        await abrir(pagina, miembro.href, 'button');
+    }
+}
+
+/**
+ * Saca del grupo familiar a todos los miembros menos al administrador, en el orden de la lista y dentro de la misma
+ * visita: entra al primero con un clic → «Quitar miembro» → si Google pide verificar, contraseña y código (una sola
+ * vez) → confirma → «Ver grupo familiar» / «Seguir» → el siguiente. Si algo necesita a una persona (captcha, otra
+ * verificación), se detiene y deja la pantalla ahí para el visor. Al final vuelve a leer el grupo para confirmar.
  */
 async function sacarTodos(pagina) {
     avisarProgreso({ paso: 'leyendo', total: null, sacados: [], fallidos: [], actual: null });
@@ -336,10 +369,12 @@ async function sacarTodos(pagina) {
     const sacados = [];
     const fallidos = [];
 
+    if (miembros.length > 0) await abrir(pagina, 'family/details', 'a[href*="family/member/"]');
+
     for (const miembro of miembros) {
         avisarProgreso({ paso: 'sacando', total: miembros.length, sacados, fallidos, actual: miembro.email });
         try {
-            await abrir(pagina, miembro.href, 'button');
+            await entrarAlMiembro(pagina, miembro);
             await pagina.getByRole('button', { name: /^(Quitar miembro|Quitar)$/i }).first().click({ timeout: 10000 });
             await pagina.waitForTimeout(2500);
             await verificarIdentidad(pagina);
@@ -347,6 +382,7 @@ async function sacarTodos(pagina) {
             await pagina.waitForTimeout(3000);
             if (!pagina.url().startsWith(BASE)) throw falla('sin_sesion');
             sacados.push(miembro.email);
+            await volverAlGrupo(pagina);
         } catch (e) {
             fallidos.push({ email: miembro.email, error: e.codigo || String(e.message || e).slice(0, 80) });
             // Lo que necesita a una persona detiene todo (la pantalla se queda ahí para resolverlo en el visor).
@@ -354,6 +390,8 @@ async function sacarTodos(pagina) {
                 avisarProgreso({ paso: 'detenido', total: miembros.length, sacados, fallidos, actual: miembro.email });
                 throw e;
             }
+            // Otro tropiezo con este miembro: se regresa al grupo y se sigue con el siguiente.
+            await abrir(pagina, 'family/details', 'a[href*="family/member/"]').catch(() => {});
         }
     }
 
