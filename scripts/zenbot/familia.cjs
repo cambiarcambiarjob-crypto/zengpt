@@ -278,10 +278,14 @@ async function invitar(pagina, correo) {
     if (!/invitationcomplete/.test(pagina.url())) {
         if (LIMITE.test(await pagina.innerText('body').catch(() => ''))) throw falla('limite_invitaciones');
         if (!pagina.url().startsWith(BASE)) throw falla('sin_sesion');
-        // Google no siempre termina en «invitationcomplete»: se confirma leyendo el grupo.
+        // Google no siempre termina en «invitationcomplete» (a veces se queda en la misma página) y tarda unos segundos en
+        // mostrar la invitación en el grupo: se confirma leyendo el grupo, con calma, hasta 3 veces.
         const pantalla = new URL(pagina.url()).pathname;
-        const despues = await leer(pagina);
-        if (despues.invitaciones.some((i) => i.email === correo) || despues.miembros.some((m) => m.email === correo)) return { ok: true, invitado: correo };
+        for (let intento = 0; intento < 3; intento++) {
+            await pagina.waitForTimeout(intento === 0 ? 3000 : 5000);
+            const despues = await leer(pagina);
+            if (despues.invitaciones.some((i) => i.email === correo) || despues.miembros.some((m) => m.email === correo)) return { ok: true, invitado: correo };
+        }
         throw falla('no_confirmado', pantalla);
     }
 
