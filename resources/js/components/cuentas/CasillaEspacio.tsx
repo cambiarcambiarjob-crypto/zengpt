@@ -46,7 +46,7 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
                     ) : (
                         <span className="cifras truncate text-[15px] leading-none font-semibold text-texto">{dinero(espacio.price_cents)}</span>
                     )}
-                    {!espacio.paid_on && !sinPrecio && (
+                    {!espacio.paid_on && espacio.price_cents > 0 && (
                         <span className="shrink-0 rounded-[4px] bg-alerta/12 px-1.5 py-0.5 text-[10px] leading-none font-semibold tracking-wide text-alerta uppercase" title="Aún no paga: no cuenta en ventas ni ganancias">
                             Por cobrar
                         </span>

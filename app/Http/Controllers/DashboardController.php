@@ -40,8 +40,8 @@ class DashboardController extends Controller
                 'espacios_bloqueados' => $bloqueados,
                 'capacidad_total' => $capacidadTotal,
                 'clientes' => Slot::query()->count(),
-                'pendientes_pago' => Slot::query()->whereNull('paid_on')->count(),
-                'pendiente_monto' => (int) Slot::query()->whereNull('paid_on')->sum('price_cents'),
+                'pendientes_pago' => Slot::query()->porCobrar()->count(),
+                'pendiente_monto' => (int) Slot::query()->porCobrar()->sum('price_cents'),
             ],
             // Cuentas vigentes con lugar: «las opciones que tengo» para acomodar al siguiente cliente.
             'conEspacio' => $activas->filter(fn (Account $a): bool => $a->tieneEspacioParaVender())

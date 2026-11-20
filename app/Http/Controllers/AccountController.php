@@ -27,7 +27,7 @@ class AccountController extends Controller
             ->when(in_array($estado, ['activas', 'llenas', 'bloqueadas', 'con_espacio'], true), fn ($query) => $query->active())
             ->when($estado === 'bloqueadas', fn ($query) => $query->where('google_bloqueo_hasta', '>', now()))
             ->when($estado === 'vencidas', fn ($query) => $query->expired())
-            ->when($estado === 'por_cobrar', fn ($query) => $query->whereHas('slots', fn ($s) => $s->whereNull('paid_on')))
+            ->when($estado === 'por_cobrar', fn ($query) => $query->whereHas('slots', fn ($s) => $s->porCobrar()))
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
                 ->where('email', 'like', "%{$q}%")
                 ->orWhereHas('slots', fn ($s) => $s->where('client_email', 'like', "%{$q}%")->orWhere('client_phone', 'like', "%{$q}%"))))

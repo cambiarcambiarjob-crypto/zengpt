@@ -49,8 +49,9 @@ class Account extends Model
     }
 
     /**
-     * «Llena»: vigente, con todos sus espacios ocupados, nadie pendiente de pago y todos dentro del grupo familiar
-     * (según la última revisión en Google si la cuenta está conectada; si no, con la invitación aceptada).
+     * «Llena»: vigente, con todos sus espacios ocupados, nadie con dinero por cobrar (los «Sin precio» no deben nada) y
+     * todos dentro del grupo familiar (según la última revisión en Google si la cuenta está conectada; si no, con la
+     * invitación aceptada).
      * Estas cuentas se apartan en la pestaña «Llenas» para que no ocupen lugar entre las que aún requieren algo.
      */
     public function estaLlena(bool $conectada): bool
@@ -59,7 +60,7 @@ class Account extends Model
 
         return $this->isActive()
             && $slots->count() >= self::capacity()
-            && $slots->every(fn (Slot $slot): bool => $slot->paid_on !== null
+            && $slots->every(fn (Slot $slot): bool => ! $slot->porCobrar()
                 && ($conectada ? $slot->google_status === 'miembro' : $slot->invite_accepted_at !== null));
     }
 

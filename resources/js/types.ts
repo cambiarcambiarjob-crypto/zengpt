@@ -27,8 +27,10 @@ export interface Cuenta {
     id: number; email: string; password: string | null; twofa_url: string | null;
     invite_links: { position: number; url: string | null; expires_on: string | null }[]; started_on: string; expires_on: string; dias_restantes: number;
     activa: boolean; por_vencer: boolean; notes: string | null;
-    capacidad: number; ocupados: number; libres: number; ingresos: number; pendientes_pago: number; espacios: Espacio[];
-    /** Vigente, los 5 espacios ocupados, nadie pendiente de pago y todos dentro del grupo: va en la pestaña «Llenas». */
+    capacidad: number; ocupados: number; libres: number; ingresos: number; espacios: Espacio[];
+    /** Clientes que deben dinero: sin pagar y con precio (los «Sin precio» no cuentan). */
+    pendientes_pago: number;
+    /** Vigente, los 5 espacios ocupados, nadie con dinero por cobrar y todos dentro del grupo: va en la pestaña «Llenas». */
     llena: boolean;
     /** Sincronización con el grupo familiar de Google (solo cuentas con sesión abierta en el servidor). */
     google: {

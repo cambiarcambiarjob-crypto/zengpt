@@ -415,6 +415,20 @@ class SistemaTest extends TestCase
         // En cuanto alguien deja de estar al corriente, regresa sola a «Activas».
         Slot::query()->where('account_id', $llena->id)->where('position', 2)->update(['paid_on' => null]);
         $this->assertSame(['conectada@gmail.com'], $correos('/cuentas?estado=llenas'));
+
+        // Los «Sin precio» que llegaron solos desde Google no deben nada: no son «por cobrar» y no impiden que esté llena.
+        config(['zengpt.google.cuentas' => ['conectada@gmail.com', 'conectada.invitado@gmail.com', 'sinprecio@gmail.com']]);
+        $sinPrecio = $this->cuenta(['email' => 'sinprecio@gmail.com']);
+        $llenar($sinPrecio, collect(range(2, 5))->mapWithKeys(fn (int $p): array => [$p => ['price_cents' => 0, 'seller_id' => null, 'paid_on' => null, 'origen' => 'google']])->all());
+        Slot::query()->where('account_id', $sinPrecio->id)->update(['google_status' => 'miembro']);
+        $this->assertSame(['conectada@gmail.com', 'sinprecio@gmail.com'], $correos('/cuentas?estado=llenas'));
+        $this->assertSame(0, Presentar::cuenta($sinPrecio->load('slots'))['pendientes_pago']);
+        $this->assertNotContains('sinprecio@gmail.com', $correos('/cuentas?estado=por_cobrar'));
+        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $page) => $page->where('cuentas.pendientes_pago', 2)->where('cuentas.pendiente_monto', 40000));
+        // Si a uno se le pone precio y no ha pagado, ya debe: la cuenta regresa a «Activas».
+        Slot::query()->where('account_id', $sinPrecio->id)->where('position', 3)->update(['price_cents' => 40000, 'seller_id' => $jorge->id]);
+        $this->assertSame(['conectada@gmail.com'], $correos('/cuentas?estado=llenas'));
+        $this->assertContains('sinprecio@gmail.com', $correos('/cuentas?estado=por_cobrar'));
     }
 
     public function test_el_limite_de_invitaciones_de_google_bloquea_los_espacios_libres_con_cuenta_regresiva(): void

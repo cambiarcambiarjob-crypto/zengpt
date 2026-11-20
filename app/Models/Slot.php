@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Hoy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -41,6 +42,21 @@ class Slot extends Model
     public function isPaid(): bool
     {
         return $this->paid_on !== null;
+    }
+
+    /**
+     * Debe dinero: no ha pagado y tiene precio. Un cliente «Sin precio» (llegó solo desde el grupo de Google y nadie le
+     * ha puesto precio) no tiene nada que cobrar; si después se le pone precio y no ha pagado, ya cuenta.
+     */
+    public function porCobrar(): bool
+    {
+        return $this->paid_on === null && $this->price_cents > 0;
+    }
+
+    /** Lo mismo que porCobrar(), en consulta. */
+    public function scopePorCobrar(Builder $query): Builder
+    {
+        return $query->whereNull('paid_on')->where('price_cents', '>', 0);
     }
 
     public function setClientEmailAttribute(string $value): void

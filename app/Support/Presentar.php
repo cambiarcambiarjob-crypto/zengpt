@@ -31,7 +31,8 @@ final class Presentar
             'ocupados' => count($espacios),
             'libres' => max(0, Account::capacity() - count($espacios)),
             'ingresos' => (int) $account->slots->whereNotNull('paid_on')->sum('price_cents'),
-            'pendientes_pago' => $account->slots->whereNull('paid_on')->count(),
+            // Clientes que deben dinero (los «Sin precio» no cuentan: no hay nada que cobrarles).
+            'pendientes_pago' => $account->slots->filter(fn (Slot $slot): bool => $slot->porCobrar())->count(),
             'llena' => $account->estaLlena($conectada),
             'espacios' => $espacios,
             'google' => [
