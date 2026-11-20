@@ -59,6 +59,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/google/visor/{account}/login', [VisorGoogleController::class, 'login'])->middleware('throttle:10,1')->name('google.visor.login');
     Route::post('/google/visor/{account}/listo', [VisorGoogleController::class, 'listo'])->middleware('throttle:10,1')->name('google.visor.listo');
     Route::post('/google/visor/{account}/cerrar', [VisorGoogleController::class, 'cerrar'])->name('google.visor.cerrar');
+    Route::post('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'sacarMiembros'])->middleware('throttle:6,1')->name('google.visor.sacar');
+    Route::get('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'estadoSacar'])->middleware('throttle:120,1')->name('google.visor.sacar.estado');
 
     Route::middleware('admin')->group(function () {
         Route::get('/vendedores', [SellerController::class, 'index'])->name('vendedores.index');

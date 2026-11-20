@@ -34,6 +34,8 @@ return [
         'correos_ligas' => explode(',', (string) env('ZENBOT_CORREOS_LIGAS', '')),
         // Segundos que una acción espera su turno si el Chrome está ocupado con otra cuenta.
         'espera' => 15,
+        // Carpeta de los perfiles de Chrome del lector (ahí deja también el avance de «sacar a todos»).
+        'perfiles' => env('ZENBOT_PERFILES', '/var/lib/zenbot/perfiles'),
         // PHP de línea de comandos para las tareas en segundo plano (p. ej. «Generar ligas»).
         'php' => env('ZENBOT_PHP', PHP_BINDIR.'/php'),
         // Pantallas del visor: cuántas cuentas pueden tener su visor abierto a la vez (cada una en la suya).

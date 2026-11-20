@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
 /**
@@ -29,6 +30,7 @@ class VisorGoogleController extends Controller
         return response()->view('visor-google', [
             'cuenta' => $account,
             'bloqueo' => $account->bloqueoHastaTexto(),
+            'sacando' => GrupoGoogle::estadoSacar($account),
             'tiene2fa' => GrupoGoogle::secreto2fa($account->twofa_url) !== '',
         ])->header('Cache-Control', 'no-store');
     }
@@ -68,6 +70,11 @@ class VisorGoogleController extends Controller
     {
         $ficha = $request->validate(['ficha' => ['nullable', 'string', 'regex:/^[A-Za-z0-9-]{8,64}$/']])['ficha'] ?? null;
 
+        // Si se cerró la pestaña mientras se saca a los miembros, el Chrome sigue hasta que termine.
+        if ($ficha !== null && (GrupoGoogle::estadoSacar($account)['estado'] ?? null) === 'sacando') {
+            return response()->noContent();
+        }
+
         try {
             $grupo->cerrarVisor($account, $ficha);
         } catch (RuntimeException) {
@@ -75,6 +82,32 @@ class VisorGoogleController extends Controller
         }
 
         return $ficha !== null ? response()->noContent() : redirect('/cuentas');
+    }
+
+    /**
+     * «Sacar a todos los miembros» (solo cuentas por activar): se lanza en segundo plano porque tarda 1–3 minutos; el
+     * visor va preguntando el avance (estadoSacar) y lo ve pasar en la pantalla.
+     */
+    public function sacarMiembros(Account $account): JsonResponse
+    {
+        if (! $account->por_activar) {
+            return response()->json(['ok' => false, 'mensaje' => 'Solo en cuentas por activar: en las activas se saca a cada cliente desde su espacio.'], 422);
+        }
+
+        if ((GrupoGoogle::estadoSacar($account)['estado'] ?? null) === 'sacando') {
+            return response()->json(['ok' => false, 'mensaje' => 'Ya se está sacando a los miembros de esta cuenta.'], 409);
+        }
+
+        GrupoGoogle::guardarEstadoSacar($account, ['estado' => 'sacando', 'mensaje' => null, 'inicio' => now()->getTimestamp(), 'fin' => null]);
+        Process::path(base_path())->run(sprintf('setsid nohup %s artisan zenbot:sacar-miembros %d > /dev/null 2>&1 &', escapeshellarg((string) config('zengpt.google.php')), $account->id));
+
+        return response()->json(['ok' => true] + (GrupoGoogle::estadoSacar($account) ?? []));
+    }
+
+    /** Avance de «sacar a todos» (el visor lo pregunta cada 2 segundos). */
+    public function estadoSacar(Account $account): JsonResponse
+    {
+        return response()->json(['ahora' => now()->getTimestamp()] + (GrupoGoogle::estadoSacar($account) ?? ['estado' => null]))->header('Cache-Control', 'no-store');
     }
 
     /** «Ya inicié sesión»: revisa el grupo para confirmar que la sesión quedó bien. */

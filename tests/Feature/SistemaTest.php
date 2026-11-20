@@ -745,6 +745,71 @@ class SistemaTest extends TestCase
         $this->assertFalse($otra->fresh()->google_conectada);
     }
 
+    public function test_sacar_a_todos_los_miembros_desde_el_visor_con_avance_y_contador(): void
+    {
+        $perfiles = sys_get_temp_dir().'/zengpt-perfiles-'.uniqid();
+        mkdir($perfiles);
+        config(['zengpt.google.perfiles' => $perfiles]);
+        $activa = $this->cuenta(['email' => 'activa.visor@gmail.com']);
+        $cuenta = $this->cuenta(['email' => 'vieja.llena@gmail.com']);
+        $cuenta->forceFill(['por_activar' => true])->save();
+
+        // El botón solo sale en cuentas por activar.
+        $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertSee('<button type="button" id="sacar"', false);
+        $this->actingAs($this->socio)->get("/google/visor/{$activa->id}")->assertDontSee('<button type="button" id="sacar"', false);
+        Process::fake();
+        $this->actingAs($this->socio)->postJson("/google/visor/{$activa->id}/sacar-miembros")->assertStatus(422);
+
+        // Se lanza en segundo plano y no se repite mientras corre.
+        $this->actingAs($this->socio)->postJson("/google/visor/{$cuenta->id}/sacar-miembros")->assertOk()->assertJson(['ok' => true, 'estado' => 'sacando']);
+        Process::assertRan(fn ($p) => is_string($p->command) && str_contains($p->command, "artisan zenbot:sacar-miembros {$cuenta->id}"));
+        $this->actingAs($this->socio)->postJson("/google/visor/{$cuenta->id}/sacar-miembros")->assertStatus(409);
+
+        // El visor pregunta el avance: lo que dejó el script (2 de 5, quién va) y la hora de inicio para el contador.
+        file_put_contents(GrupoGoogle::archivoProgreso($cuenta), json_encode(['paso' => 'sacando', 'total' => 5, 'sacados' => ['a@gmail.com', 'b@gmail.com'], 'actual' => 'c@gmail.com', 'actualizado' => (int) (microtime(true) * 1000) + 1000]));
+        $this->actingAs($this->socio)->getJson("/google/visor/{$cuenta->id}/sacar-miembros")->assertOk()
+            ->assertJson(['estado' => 'sacando', 'avance' => ['paso' => 'sacando', 'total' => 5, 'sacados' => 2, 'actual' => 'c@gmail.com']])
+            ->assertJsonStructure(['ahora', 'inicio']);
+
+        // Cerrar la pestaña mientras trabaja no tumba el Chrome.
+        $this->actingAs($this->socio)->post("/google/visor/{$cuenta->id}/cerrar", ['ficha' => 'ficha-de-prueba-123'])->assertNoContent();
+        Process::assertDidntRun(fn ($p) => in_array('cerrar', (array) $p->command, true));
+
+        // La tarea: Google saca a los 5 y el grupo queda solo con el administrador; la cuenta queda conectada.
+        Process::fake(function ($p) {
+            $cmd = (array) $p->command;
+
+            return in_array('sacar-todos', $cmd, true)
+                ? Process::result(json_encode(['ok' => true, 'total' => 5, 'sacados' => ['a@gmail.com', 'b@gmail.com', 'c@gmail.com', 'd@gmail.com', 'e@gmail.com'], 'siguen' => [], 'fallidos' => []]))
+                : Process::result(json_encode(['ok' => true, 'admin' => 'vieja.llena@gmail.com', 'miembros' => [['email' => 'vieja.llena@gmail.com', 'admin' => true]], 'invitaciones' => []]));
+        });
+        $this->artisan('zenbot:sacar-miembros', ['cuenta' => $cuenta->id])->assertSuccessful();
+        Process::assertRan(fn ($p) => in_array('sacar-todos', (array) $p->command, true) && $p->timeout === 900);
+        $estado = GrupoGoogle::estadoSacar($cuenta);
+        $this->assertSame('listo', $estado['estado']);
+        $this->assertSame('Listo: se sacó a 5 miembros. El grupo quedó solo con el administrador.', $estado['mensaje']);
+        $this->assertNotNull($estado['fin']);
+        $this->assertTrue($cuenta->fresh()->google_conectada);
+
+        // Si Google pide algo que necesita a una persona (captcha), se detiene y lo dice; se puede volver a intentar.
+        Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'requiere_persona']), exitCode: 1)]);
+        $this->artisan('zenbot:sacar-miembros', ['cuenta' => $cuenta->id])->assertFailed();
+        $this->assertSame('error', GrupoGoogle::estadoSacar($cuenta)['estado']);
+        $this->assertStringContainsString('captcha', GrupoGoogle::estadoSacar($cuenta)['mensaje']);
+
+        // Si alguno sigue en el grupo al final, se dice quién.
+        Process::fake(function ($p) {
+            return in_array('sacar-todos', (array) $p->command, true)
+                ? Process::result(json_encode(['ok' => true, 'total' => 2, 'sacados' => ['a@gmail.com'], 'siguen' => ['terco@gmail.com'], 'fallidos' => [['email' => 'terco@gmail.com', 'error' => 'no_confirmado']]]))
+                : Process::result(json_encode(['ok' => true, 'admin' => 'vieja.llena@gmail.com', 'miembros' => [['email' => 'vieja.llena@gmail.com', 'admin' => true]], 'invitaciones' => []]));
+        });
+        $this->artisan('zenbot:sacar-miembros', ['cuenta' => $cuenta->id])->assertFailed();
+        $this->assertStringContainsString('Siguen en el grupo: terco@gmail.com', GrupoGoogle::estadoSacar($cuenta)['mensaje']);
+
+        array_map('unlink', glob($perfiles.'/{,.}*.json', GLOB_BRACE) ?: []);
+        @rmdir($perfiles);
+    }
+
     public function test_generar_ligas_manda_una_invitacion_por_lugar_libre_al_correo_de_ligas(): void
     {
         config(['zengpt.google.correos_ligas' => ['Dueno.Ligas@gmail.com'], 'zengpt.google.cuentas' => ['nueva.ligas@gmail.com']]);

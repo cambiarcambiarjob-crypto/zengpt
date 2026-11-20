@@ -55,6 +55,16 @@
         .bloqueo p { margin: 0; line-height: 1.4; }
         .bloqueo b { color: var(--peligro); }
         button.peligro { border-color: rgba(229,83,75,.5); color: var(--peligro); }
+        .sacar { padding: 10px; border: 1px solid rgba(229,83,75,.35); border-radius: 6px; background: rgba(229,83,75,.05); font-size: 12px; color: var(--suave); display: grid; gap: 8px; }
+        .sacar p { margin: 0; line-height: 1.4; }
+        .sacar b { color: var(--texto); }
+        .sacar-estado { display: grid; gap: 6px; }
+        .sacar-estado[hidden] { display: none; }
+        .sacar-fila { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+        .reloj { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--texto); font-size: 14px; }
+        .sacar-estado.ok #sacar-texto { color: var(--acento); }
+        .sacar-estado.mal #sacar-texto { color: var(--peligro); }
+        #sacar:disabled { opacity: .45; cursor: not-allowed; }
         button.peligro:hover { background: rgba(229,83,75,.12); border-color: var(--peligro); color: var(--peligro); }
         a { color: var(--acento); }
         @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-template-rows: 60vh auto; } aside { border-left: 0; border-top: 1px solid var(--borde); } }
@@ -140,6 +150,19 @@
             @endif
             <div id="aviso" class="aviso"></div>
 
+            @if ($cuenta->por_activar)
+                {{-- Cuentas por activar con clientes viejos que no renovaron: se sacan todos de una vez (menos el administrador). --}}
+                <div class="sacar">
+                    <p><b>Cuenta por activar.</b> Saca del grupo familiar a los clientes que ya no renovaron: a todos menos al administrador. Si Google pide el 2FA, el sistema lo pone solo.</p>
+                    <button type="button" id="sacar" class="peligro" style="width:100%" disabled>Sacar a todos los miembros</button>
+                    <div id="sacar-estado" class="sacar-estado" hidden aria-live="polite">
+                        <div class="sacar-fila"><span id="sacar-texto">Empezando…</span><span id="sacar-reloj" class="reloj" role="timer">0:00</span></div>
+                        <div class="barra"><i id="sacar-barra" style="width:0%"></i></div>
+                        <p id="sacar-nota">Suele tardar de 1 a 3 minutos. Lo ves en la pantalla: no muevas nada mientras trabaja.</p>
+                    </div>
+                </div>
+            @endif
+
             {{-- Si al invitar Google dice «Has alcanzado el límite de invitaciones al grupo familiar». «Revisar grupo» también lo detecta solo. --}}
             <div class="bloqueo">
                 @if ($bloqueo)
@@ -182,9 +205,12 @@
         let rfb = null;
         let pantalla = null;
         let propio = false;
+        let sacandoAhora = false;
         const permitir = (si) => {
             propio = si;
-            document.querySelectorAll('[data-pegar], #listo').forEach((b) => (b.disabled = !si));
+            document.querySelectorAll('[data-pegar]').forEach((b) => (b.disabled = !si));
+            // Mientras se saca a los miembros, el Chrome está ocupado: no se revisa el grupo ni se reabre.
+            document.querySelectorAll('#listo, #sacar').forEach((b) => (b.disabled = !si || sacandoAhora));
         };
         const conectar = (n) => {
             if (rfb && pantalla === n) return;
@@ -286,6 +312,66 @@
             boton.disabled = false;
         };
         boton.addEventListener('click', () => abrirChrome());
+
+        // «Sacar a todos los miembros»: corre en el servidor; aquí se ve el avance y el tiempo que lleva.
+        const sacarBoton = document.getElementById('sacar');
+        if (sacarBoton) {
+            const caja = document.getElementById('sacar-estado');
+            const texto = document.getElementById('sacar-texto');
+            const reloj = document.getElementById('sacar-reloj');
+            const barraSacar = document.getElementById('sacar-barra');
+            let estadoSacar = @json($sacando);
+            let desfaseReloj = 0;
+            let consulta = null;
+            const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
+            const pintar = () => {
+                if (!estadoSacar || !estadoSacar.estado) return;
+                caja.hidden = false;
+                const e = estadoSacar;
+                const fin = e.fin ?? Math.floor(Date.now() / 1000 + desfaseReloj);
+                reloj.textContent = mmss(fin - e.inicio);
+                caja.className = 'sacar-estado' + (e.estado === 'listo' ? ' ok' : e.estado === 'error' ? ' mal' : '');
+                const a = e.avance || {};
+                if (e.estado === 'sacando') {
+                    texto.textContent = a.paso === 'sacando' && a.total ? `Sacando ${Math.min(a.sacados + 1, a.total)} de ${a.total}: ${a.actual ?? ''}`
+                        : a.paso === 'comprobando' ? 'Comprobando que ya no estén…'
+                        : a.paso === 'detenido' ? 'Se detuvo: revisa la pantalla…'
+                        : 'Leyendo el grupo en Google…';
+                    barraSacar.style.width = a.total ? `${Math.round((a.sacados / a.total) * 100)}%` : '4%';
+                } else {
+                    texto.textContent = e.mensaje || (e.estado === 'listo' ? 'Listo.' : 'No se pudo terminar.');
+                    barraSacar.style.width = e.estado === 'listo' ? '100%' : barraSacar.style.width;
+                }
+                sacandoAhora = e.estado === 'sacando';
+                permitir(propio);
+                sacarBoton.textContent = sacandoAhora ? 'Sacando miembros…' : 'Sacar a todos los miembros';
+            };
+            const preguntar = async () => {
+                try {
+                    const r = await fetch(location.pathname + '/sacar-miembros', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+                    const j = await r.json();
+                    desfaseReloj = j.ahora - Date.now() / 1000;
+                    estadoSacar = j;
+                    pintar();
+                    if (j.estado !== 'sacando') { clearInterval(consulta); consulta = null; }
+                } catch {}
+            };
+            const seguir = () => { if (!consulta) consulta = setInterval(preguntar, 2000); };
+            setInterval(() => { if (estadoSacar && estadoSacar.estado === 'sacando') pintar(); }, 1000);
+            sacarBoton.addEventListener('click', async () => {
+                if (!confirm('Se saca del grupo familiar a TODOS los miembros de esta cuenta (menos el administrador). Google no les deja unirse a otro grupo familiar en 12 meses. ¿Continuar?')) return;
+                sacarBoton.disabled = true;
+                try {
+                    const r = await fetch(location.pathname + '/sacar-miembros', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' } });
+                    const j = await r.json();
+                    if (!j.ok) { avisar(j.mensaje || 'No se pudo empezar.', false); permitir(propio); return; }
+                    estadoSacar = j;
+                    pintar();
+                    seguir();
+                } catch { avisar('No se pudo empezar.', false); permitir(propio); }
+            });
+            if (estadoSacar && estadoSacar.estado) { pintar(); if (estadoSacar.estado === 'sacando') seguir(); }
+        }
         document.getElementById('forzar').addEventListener('click', () => {
             if (confirm('Se cierra el visor que lleva más tiempo abierto (si alguien lo está usando, se le corta). ¿Continuar?')) abrirChrome(true);
         });

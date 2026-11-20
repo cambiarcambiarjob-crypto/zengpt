@@ -12,6 +12,8 @@
 //                                       (limite: alguna pestaña abierta, p. ej. la del visor, mostraba el límite de invitaciones)
 //   node familia.cjs invitar CORREO  → {"ok":true,"invitado":"correo"}
 //   node familia.cjs sacar CORREO    → {"ok":true,"sacado":"correo","era":"miembro"|"invitacion"}
+//   node familia.cjs sacar-todos     → saca a todos los miembros menos al administrador → {"ok":true,"sacados":[…],"siguen":[…],"fallidos":[…]}
+//                                      (va dejando el avance en ZENBOT_PERFILES/.progreso-<correo>.json para el visor)
 //   errores                          → {"ok":false,"error":"sin_sesion"|"sin_navegador"|"otra_cuenta"|"no_encontrado"|"sin_lugar"|"no_confirmado"|"limite_invitaciones"|"sin_pantalla"|"…"}
 const crypto = require('crypto');
 const fs = require('fs');
@@ -81,11 +83,22 @@ async function verificarIdentidad(pagina) {
             await campo.press('Enter');
         } else if (/challenge\/totp/.test(url)) {
             if (!SECRETO_2FA) throw falla('falta_2fa');
-            const campo = pagina.locator('input[type=tel], input[name=totpPin], input#totpPin').first();
-            await campo.waitFor({ timeout: 15000 });
-            await campo.fill('');
-            await campo.pressSequentially(codigo2fa(SECRETO_2FA), { delay: 60 });
-            await campo.press('Enter');
+            // Código actual; si Google no lo acepta, el siguiente (a veces espera ese); si tampoco, espera a que cambie
+            // el código y prueba el nuevo.
+            let paso = false;
+            for (const desfase of [0, 1, 'nuevo']) {
+                if (desfase === 'nuevo') await dormir(30000 - (Date.now() % 30000) + 1500);
+                const campo = pagina.locator('input[type=tel], input[name=totpPin], input#totpPin').first();
+                await campo.waitFor({ timeout: 15000 });
+                await campo.fill('');
+                await campo.pressSequentially(codigo2fa(SECRETO_2FA, desfase === 'nuevo' ? 0 : desfase), { delay: 60 });
+                await campo.press('Enter');
+                await pagina.waitForURL((u) => u.toString() !== url, { timeout: 15000 }).catch(() => {});
+                await pagina.waitForTimeout(1500);
+                if (pagina.url() !== url) { paso = true; break; }
+            }
+            if (!paso) throw falla('verificacion_rechazada', new URL(url).pathname);
+            continue;
         } else if (/challenge\/selection|challenge\/ootp|challenge\/az|challenge\/ipp|challenge\/sk/.test(url)) {
             throw falla('verificacion_distinta', new URL(url).pathname);
         } else if (/signin\/(v2\/)?(identifier|rejected)|deniedsigninrejected/.test(url)) {
@@ -307,6 +320,52 @@ async function sacar(pagina, correo) {
     return { ok: true, sacado: correo, era: invitacion ? 'invitacion' : 'miembro' };
 }
 
+/** Avance de «sacar a todos» para el visor (lo lee el sistema mientras trabaja). */
+const PROGRESO = path.join(PERFILES, `.progreso-${ESPERADO.replace(/[^a-z0-9@._-]/g, '_')}.json`);
+const avisarProgreso = (datos) => { try { fs.writeFileSync(PROGRESO, JSON.stringify({ ...datos, actualizado: Date.now() })); } catch {} };
+
+/**
+ * Saca del grupo familiar a todos los miembros menos al administrador, uno por uno (si Google pide confirmar la
+ * identidad, usa la contraseña y el 2FA de la cuenta). Si algo necesita a una persona (captcha, otra verificación),
+ * se detiene y deja la pantalla ahí para el visor. Al final vuelve a leer el grupo para confirmar.
+ */
+async function sacarTodos(pagina) {
+    avisarProgreso({ paso: 'leyendo', total: null, sacados: [], fallidos: [], actual: null });
+    const grupo = await leer(pagina);
+    const miembros = grupo.miembros.filter((m) => !m.admin);
+    const sacados = [];
+    const fallidos = [];
+
+    for (const miembro of miembros) {
+        avisarProgreso({ paso: 'sacando', total: miembros.length, sacados, fallidos, actual: miembro.email });
+        try {
+            await abrir(pagina, miembro.href, 'button');
+            await pagina.getByRole('button', { name: /^(Quitar miembro|Quitar)$/i }).first().click({ timeout: 10000 });
+            await pagina.waitForTimeout(2500);
+            await verificarIdentidad(pagina);
+            await confirmarQuitar(pagina, false);
+            await pagina.waitForTimeout(3000);
+            if (!pagina.url().startsWith(BASE)) throw falla('sin_sesion');
+            sacados.push(miembro.email);
+        } catch (e) {
+            fallidos.push({ email: miembro.email, error: e.codigo || String(e.message || e).slice(0, 80) });
+            // Lo que necesita a una persona detiene todo (la pantalla se queda ahí para resolverlo en el visor).
+            if (['requiere_persona', 'verificacion_distinta', 'verificacion_atorada', 'verificacion_rechazada', 'sin_sesion', 'falta_contrasena', 'falta_2fa'].includes(e.codigo)) {
+                avisarProgreso({ paso: 'detenido', total: miembros.length, sacados, fallidos, actual: miembro.email });
+                throw e;
+            }
+        }
+    }
+
+    avisarProgreso({ paso: 'comprobando', total: miembros.length, sacados, fallidos, actual: null });
+    const despues = await leer(pagina);
+    const siguen = despues.miembros.filter((m) => !m.admin).map((m) => m.email);
+    const confirmados = sacados.filter((correo) => !siguen.includes(correo));
+    avisarProgreso({ paso: 'listo', total: miembros.length, sacados: confirmados, fallidos, actual: null, siguen });
+
+    return { ok: true, total: miembros.length, sacados: confirmados, siguen, fallidos };
+}
+
 (async () => {
     if (!CORREO.test(ESPERADO)) return salir({ ok: false, error: 'sin_cuenta' }, 2);
 
@@ -349,6 +408,9 @@ async function sacar(pagina, correo) {
         if (accion === 'leer') {
             const grupo = await leer(pagina);
             return await salir({ ok: true, ...grupo, limite, leido: new Date().toISOString() });
+        }
+        if (accion === 'sacar-todos') {
+            return await salir(await sacarTodos(pagina));
         }
         if (['invitar', 'sacar', 'ver-quitar'].includes(accion) && CORREO.test(objetivo)) {
             return await salir(accion === 'invitar' ? await invitar(pagina, objetivo) : await sacar(pagina, objetivo));

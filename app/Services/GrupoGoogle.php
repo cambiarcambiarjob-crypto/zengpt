@@ -270,6 +270,66 @@ class GrupoGoogle
     }
 
     /**
+     * «Sacar a todos los miembros» (cuentas por activar con clientes viejos que no renovaron): Google los quita del grupo
+     * uno por uno en el Chrome de la cuenta (se ve en su visor). Tarda 1–3 minutos; el avance lo deja el script en un
+     * archivo (progresoSacar). Funciona con la sesión que esté abierta en el visor aunque la cuenta no esté marcada
+     * como conectada; si sale bien, queda conectada.
+     *
+     * @return array{total: int, sacados: list<string>, siguen: list<string>, fallidos: list<array{email: string, error: string}>}
+     */
+    public function sacarTodos(Account $account): array
+    {
+        $datos = $this->ejecutar($account, ['sacar-todos'], 900, requiereConexion: false);
+        $account->forceFill(['google_conectada' => true])->save();
+
+        return [
+            'total' => (int) ($datos['total'] ?? 0),
+            'sacados' => array_values((array) ($datos['sacados'] ?? [])),
+            'siguen' => array_values((array) ($datos['siguen'] ?? [])),
+            'fallidos' => array_values((array) ($datos['fallidos'] ?? [])),
+        ];
+    }
+
+    /** Archivo donde el script va dejando el avance de «sacar a todos» de una cuenta. */
+    public static function archivoProgreso(Account $account): string
+    {
+        return rtrim((string) config('zengpt.google.perfiles'), '/').'/.progreso-'.preg_replace('/[^a-z0-9@._-]/', '_', mb_strtolower($account->email)).'.json';
+    }
+
+    /**
+     * Cómo va «sacar a todos» de una cuenta: el estado de la tarea (sacando | listo | error, con su hora de inicio para
+     * el contador) más el avance que dejó el script (total, sacados, quién va). null si no se ha pedido.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function estadoSacar(Account $account): ?array
+    {
+        $estado = Cache::get("sacar-miembros:{$account->id}");
+        if (! is_array($estado)) {
+            return null;
+        }
+
+        $archivo = self::archivoProgreso($account);
+        $avance = is_readable($archivo) ? json_decode((string) file_get_contents($archivo), true) : null;
+        if (is_array($avance) && ($avance['actualizado'] ?? 0) >= ($estado['inicio'] ?? 0) * 1000) {
+            $estado['avance'] = [
+                'paso' => $avance['paso'] ?? null,
+                'total' => $avance['total'] ?? null,
+                'sacados' => count((array) ($avance['sacados'] ?? [])),
+                'actual' => $avance['actual'] ?? null,
+            ];
+        }
+
+        return $estado;
+    }
+
+    /** @param  array<string, mixed>  $estado */
+    public static function guardarEstadoSacar(Account $account, array $estado): void
+    {
+        Cache::put("sacar-miembros:{$account->id}", $estado, now()->addMinutes($estado['estado'] === 'sacando' ? 20 : 15));
+    }
+
+    /**
      * Cómo va «Generar ligas» de una cuenta (se genera en segundo plano): estado generando | listo | error, cuántas se
      * mandaron y un mensaje. null si no se ha pedido en los últimos minutos.
      *
