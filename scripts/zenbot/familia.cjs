@@ -168,7 +168,8 @@ async function chromeDe(correo, visor = false, forzar = false) {
         fs.mkdirSync(CASA, { recursive: true });
         const hijo = spawn(CHROME, [
             `--user-data-dir=${perfil}`, '--no-first-run', '--no-default-browser-check', '--lang=es-MX',
-            '--window-position=0,0', '--window-size=1366,860', '--renderer-process-limit=2',
+            // Sin tope de procesos: con 8 GB cada visor usa la memoria que necesite (más fluido).
+            '--window-position=0,0', '--window-size=1366,860', '--disk-cache-size=268435456',
             '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${puertoDe(n)}`, 'about:blank',
         ], { detached: true, stdio: 'ignore', env: { ...process.env, DISPLAY: displayDe(n), HOME: CASA, ZENBOT_PASS: '', ZENBOT_TOTP: '' } });
         hijo.unref();
