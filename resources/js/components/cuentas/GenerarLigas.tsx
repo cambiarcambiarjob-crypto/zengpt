@@ -8,8 +8,8 @@ import type { Cuenta } from '@/types';
 const CADA = 5000; // mientras se generan, la tarjeta se actualiza cada 5 s
 
 /**
- * «Generar ligas»: Google manda, desde el grupo familiar de la cuenta, una invitación por cada lugar libre a tu correo
- * de ligas (en segundo plano, 1–2 minutos). Luego pegas cada liga en «Editar cuenta», como siempre.
+ * «Generar liga»: una a la vez. Google manda, desde el grupo familiar de la cuenta, una invitación a tu correo de ligas
+ * (tal cual). Luego pegas la liga en «Editar cuenta», como siempre, y cuando se use generas la siguiente.
  * Necesita la sesión de Google de la cuenta en el servidor (se conecta una vez con el visor).
  */
 export function GenerarLigas({ cuenta }: { cuenta: Cuenta }) {
@@ -39,14 +39,14 @@ export function GenerarLigas({ cuenta }: { cuenta: Cuenta }) {
                 cargando={pidiendo}
                 title={
                     cuenta.google.conectada
-                        ? 'Google te manda una invitación por cada espacio a tu correo de ligas; luego pegas las ligas en «Editar cuenta».'
+                        ? 'Google te manda UNA invitación a tu correo de ligas; la pegas en «Editar cuenta» y, cuando se use, generas la siguiente.'
                         : 'Primero conecta la cuenta con Google (visor): inicia sesión una vez.'
                 }
             >
-                {generando ? 'Generando ligas…' : 'Generar ligas'}
+                {generando ? 'Mandando liga…' : 'Generar liga'}
             </Boton>
 
-            {!cuenta.google.conectada && !progreso && <span className="text-xs text-tenue">Conéctala con el visor para generar ligas</span>}
+            {!cuenta.google.conectada && !progreso && <span className="text-xs text-tenue">Conéctala con el visor para generar la liga</span>}
 
             {progreso && (
                 <span
@@ -59,11 +59,7 @@ export function GenerarLigas({ cuenta }: { cuenta: Cuenta }) {
                     {progreso.estado === 'listo' && <CircleCheck className="size-3.5 shrink-0" aria-hidden="true" />}
                     {progreso.estado === 'error' && <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />}
                     <span className="min-w-0">
-                        {progreso.estado === 'generando'
-                            ? progreso.total
-                                ? `${progreso.enviadas} de ${progreso.total} invitaciones enviadas a tu correo de ligas…`
-                                : 'Revisando el grupo en Google…'
-                            : progreso.mensaje}
+                        {progreso.estado === 'generando' ? 'Mandando la liga a tu correo de ligas…' : progreso.mensaje}
                     </span>
                 </span>
             )}

@@ -140,7 +140,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                         </p>
                     )}
                     <GoogleCuenta cuenta={cuenta} />
-                    {/* Cuentas por activar: Google manda las 5 invitaciones al correo de ligas para dejarlas listas. */}
+                    {/* Cuentas por activar: Google manda las ligas al correo de ligas, una a la vez. */}
                     {porActivar && (
                         <div className="mt-2.5">
                             <GenerarLigas cuenta={cuenta} />

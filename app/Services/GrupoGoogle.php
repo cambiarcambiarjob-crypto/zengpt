@@ -199,65 +199,49 @@ class GrupoGoogle
         return $resumen + ['bloqueo' => $account->bloqueoHastaTexto()];
     }
 
-    /**
-     * Correos a los que se mandan las ligas: variantes «+1», «+2», … del correo de ligas (Gmail las entrega en el mismo
-     * buzón y el sistema las reconoce como ligas, no como clientes).
-     *
-     * @return list<string>
-     */
-    public static function correosParaLigas(int $cuantos): array
+    /** El correo de ligas tal cual (el primero de ZENBOT_CORREOS_LIGAS), o null si no hay. */
+    public static function correoDeLigas(): ?string
     {
-        $base = collect((array) config('zengpt.google.correos_ligas', []))->map(fn ($c): string => mb_strtolower(trim((string) $c)))->first(fn (string $c): bool => str_contains($c, '@'));
-        if ($base === null || $cuantos < 1) {
-            return [];
-        }
-
-        [$usuario, $dominio] = explode('@', $base, 2);
-        $usuario = explode('+', $usuario, 2)[0];
-
-        return array_map(fn (int $k): string => "{$usuario}+{$k}@{$dominio}", range(1, $cuantos));
+        return collect((array) config('zengpt.google.correos_ligas', []))->map(fn ($c): string => mb_strtolower(trim((string) $c)))->first(fn (string $c): bool => str_contains($c, '@'));
     }
 
     /**
-     * «Generar ligas»: manda una invitación del grupo familiar a una variante del correo de ligas por cada lugar libre
-     * en Google (hasta llenar los espacios de la cuenta), para pegar después esas ligas en la cuenta. No repite las que
-     * ya estén invitadas. `avance(enviadas, total)` se llama tras cada invitación. Se detiene en el primer error (por
-     * ejemplo, el límite de invitaciones de Google, que además deja la cuenta bloqueada).
+     * «Generar liga»: una a la vez. Google manda una invitación del grupo familiar al correo de ligas (tal cual, sin
+     * variantes) para pegar esa liga en la cuenta. Si ya hay una invitación pendiente a ese correo, no manda otra (hay
+     * que usarla primero); si el grupo ya no tiene lugares, tampoco.
      *
-     * @return array{enviadas: int, total: int, error: ?string}
+     * @return array{enviadas: int, motivo: ?string, error: ?string} motivo: pendiente | sin_lugar | null
      */
     public function generarLigas(Account $account, ?callable $avance = null): array
     {
-        $grupo = $this->leer($account);
-        $invitados = collect($grupo['invitaciones'])->pluck('email')->map(fn ($e): string => mb_strtolower((string) $e));
-        $miembros = collect($grupo['miembros'])->reject(fn (array $m): bool => (bool) ($m['admin'] ?? false))->count();
-        $lugares = min(Account::capacity(), $grupo['quedan'] ?? max(0, Account::capacity() - $miembros - $invitados->count()));
-
-        $correos = collect(self::correosParaLigas(Account::capacity() * 2))->reject(fn (string $c): bool => $invitados->contains($c))->take($lugares)->values();
-        if ($correos->isEmpty() && $lugares > 0) {
+        $correo = self::correoDeLigas();
+        if ($correo === null) {
             throw new RuntimeException('No hay correo de ligas configurado en el servidor (ZENBOT_CORREOS_LIGAS).');
         }
 
-        $enviadas = 0;
-        $error = null;
-        foreach ($correos as $correo) {
-            try {
-                $this->ejecutar($account, ['invitar', $correo], 80);
-            } catch (RuntimeException $e) {
-                $error = $e->getMessage();
+        $grupo = $this->leer($account);
+        $invitados = collect($grupo['invitaciones'])->pluck('email')->map(fn ($e): string => mb_strtolower((string) $e));
+        $miembros = collect($grupo['miembros'])->reject(fn (array $m): bool => (bool) ($m['admin'] ?? false))->count();
+        $lugares = $grupo['quedan'] ?? max(0, Account::capacity() - $miembros - $invitados->count());
 
-                break;
-            }
-            $enviadas++;
-            if ($avance) {
-                $avance($enviadas, $correos->count());
-            }
+        if ($invitados->contains($correo)) {
+            return ['enviadas' => 0, 'motivo' => 'pendiente', 'error' => null];
+        }
+        if ($lugares < 1) {
+            return ['enviadas' => 0, 'motivo' => 'sin_lugar', 'error' => null];
         }
 
-        // Google aceptó todas: ya no hay límite de invitaciones (si se topó con él, la cuenta queda bloqueada).
-        if ($enviadas > 0 && $error === null) {
-            $account->desbloquearInvitaciones();
+        try {
+            $this->ejecutar($account, ['invitar', $correo], 80);
+        } catch (RuntimeException $e) {
+            return ['enviadas' => 0, 'motivo' => null, 'error' => $e->getMessage()];
         }
+
+        if ($avance) {
+            $avance(1, 1);
+        }
+        // Google la aceptó: ya no hay límite de invitaciones.
+        $account->desbloquearInvitaciones();
 
         // Cuenta las ligas que quedaron pendientes en Google.
         try {
@@ -266,7 +250,7 @@ class GrupoGoogle
             // La siguiente revisión las contará.
         }
 
-        return ['enviadas' => $enviadas, 'total' => $correos->count(), 'error' => $error];
+        return ['enviadas' => 1, 'motivo' => null, 'error' => null];
     }
 
     /**

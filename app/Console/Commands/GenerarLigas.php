@@ -8,8 +8,8 @@ use Illuminate\Console\Command;
 use RuntimeException;
 
 /**
- * «Generar ligas» en segundo plano (lo lanza el botón de la cuenta): manda las invitaciones del grupo familiar al correo
- * de ligas y va guardando el avance para que la tarjeta lo muestre.
+ * «Generar liga» en segundo plano (lo lanza el botón de la cuenta): manda UNA invitación del grupo familiar al correo de
+ * ligas y guarda el resultado para que la tarjeta lo muestre.
  *
  *   php artisan zenbot:generar-ligas 12
  */
@@ -17,7 +17,7 @@ class GenerarLigas extends Command
 {
     protected $signature = 'zenbot:generar-ligas {cuenta : id de la cuenta}';
 
-    protected $description = 'Manda las invitaciones del grupo familiar al correo de ligas (una por lugar libre)';
+    protected $description = 'Manda una invitación del grupo familiar al correo de ligas (una a la vez)';
 
     public function handle(GrupoGoogle $grupo): int
     {
@@ -33,18 +33,19 @@ class GenerarLigas extends Command
         try {
             $r = $grupo->generarLigas($cuenta, fn (int $enviadas, int $total) => GrupoGoogle::guardarEstadoLigas($cuenta, ['estado' => 'generando', 'enviadas' => $enviadas, 'total' => $total, 'mensaje' => null]));
         } catch (RuntimeException $e) {
-            GrupoGoogle::guardarEstadoLigas($cuenta, ['estado' => 'error', 'enviadas' => 0, 'total' => null, 'mensaje' => $e->getMessage()]);
+            GrupoGoogle::guardarEstadoLigas($cuenta, ['estado' => 'error', 'enviadas' => 0, 'total' => 1, 'mensaje' => $e->getMessage()]);
             $this->error($e->getMessage());
 
             return self::FAILURE;
         }
 
         $mensaje = match (true) {
-            $r['total'] === 0 => 'El grupo de Google ya no tiene lugares libres: no hacía falta mandar más ligas.',
-            $r['error'] !== null => "Se mandaron {$r['enviadas']} de {$r['total']}: {$r['error']}",
-            default => "Listo: {$r['enviadas']} invitaciones enviadas a tu correo de ligas. Pega cada liga en «Editar cuenta».",
+            $r['error'] !== null => "No se mandó la liga: {$r['error']}",
+            $r['motivo'] === 'pendiente' => 'Ya hay una liga pendiente en tu correo de ligas para esta cuenta: úsala primero y luego genera la siguiente.',
+            $r['motivo'] === 'sin_lugar' => 'El grupo de Google ya no tiene lugares libres: no hace falta otra liga.',
+            default => 'Listo: te llegó una liga a tu correo de ligas. Pégala en «Editar cuenta» y, cuando se use, genera la siguiente.',
         };
-        GrupoGoogle::guardarEstadoLigas($cuenta, ['estado' => $r['error'] !== null ? 'error' : 'listo', 'enviadas' => $r['enviadas'], 'total' => $r['total'], 'mensaje' => $mensaje]);
+        GrupoGoogle::guardarEstadoLigas($cuenta, ['estado' => $r['error'] !== null ? 'error' : 'listo', 'enviadas' => $r['enviadas'], 'total' => 1, 'mensaje' => $mensaje]);
         $this->info($mensaje);
 
         return $r['error'] !== null ? self::FAILURE : self::SUCCESS;
