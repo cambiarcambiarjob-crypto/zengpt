@@ -39,6 +39,8 @@ export interface Cuenta {
         conectada: boolean; revisada: string | null; ligas: number; extra: { email: string; tipo: 'miembro' | 'invitado' }[];
         /** Google no deja invitar hasta este momento (ISO 8601; «límite de invitaciones»). null = sin bloqueo. */
         bloqueo_hasta: string | null;
+        /** «Generar ligas» en curso o recién terminado (se hace en segundo plano); null si no se ha pedido. */
+        generando_ligas: { estado: 'generando' | 'listo' | 'error'; enviadas: number; total: number | null; mensaje: string | null } | null;
     };
 }
 

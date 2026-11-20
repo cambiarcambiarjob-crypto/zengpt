@@ -10,6 +10,7 @@ use App\Support\Presentar;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -73,6 +74,26 @@ class AccountController extends Controller
         $cuenta->syncInviteLinks();
 
         return back()->with('success', $cuenta->por_activar ? 'Cuenta agregada en «Por activar».' : 'Cuenta agregada.');
+    }
+
+    /**
+     * «Generar ligas»: en segundo plano (tarda 1–2 minutos), Google manda una invitación del grupo familiar por cada
+     * lugar libre al correo de ligas; luego se pegan esas ligas en la cuenta como siempre. La tarjeta muestra el avance.
+     */
+    public function generarLigas(Account $account): RedirectResponse
+    {
+        if (! GrupoGoogle::conectada($account)) {
+            return back()->with('error', 'Primero conecta la cuenta con Google: entra una vez con «Conectar con Google (visor)» y luego genera las ligas.');
+        }
+
+        if ((GrupoGoogle::estadoLigas($account)['estado'] ?? null) === 'generando') {
+            return back()->with('error', 'Ya se están generando las ligas de esta cuenta: espera a que terminen.');
+        }
+
+        GrupoGoogle::guardarEstadoLigas($account, ['estado' => 'generando', 'enviadas' => 0, 'total' => null, 'mensaje' => null]);
+        Process::path(base_path())->run(sprintf('setsid nohup %s artisan zenbot:generar-ligas %d > /dev/null 2>&1 &', escapeshellarg((string) config('zengpt.google.php')), $account->id));
+
+        return back()->with('success', 'Generando las ligas: Google te manda una invitación por espacio a tu correo de ligas (tarda 1 o 2 minutos).');
     }
 
     /** Activa una cuenta que estaba «por activar»: su vigencia corre desde la fecha de inicio elegida (hoy por omisión). */

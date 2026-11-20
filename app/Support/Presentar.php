@@ -44,6 +44,8 @@ final class Presentar
                 'ligas' => (int) $account->google_ligas,
                 // Google no deja invitar hasta esta fecha (ISO 8601); null = sin bloqueo o ya pasó.
                 'bloqueo_hasta' => $account->invitacionesBloqueadas() ? $account->google_bloqueo_hasta->toIso8601String() : null,
+                // «Generar ligas» en curso o recién terminado (null si no se ha pedido).
+                'generando_ligas' => GrupoGoogle::estadoLigas($account),
             ],
         ];
     }

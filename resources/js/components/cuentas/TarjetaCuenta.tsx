@@ -8,6 +8,7 @@ import { diasEnPalabras, diasEntre, dinero, fechaCorta } from '@/lib/formato';
 import type { Cuenta, Espacio } from '@/types';
 import { AvisoBloqueo, CasillaBloqueada } from './BloqueoGoogle';
 import { CasillaLibre, CasillaOcupada } from './CasillaEspacio';
+import { GenerarLigas } from './GenerarLigas';
 import { Copiable } from './Copiable';
 import { GoogleCuenta } from './GoogleCuenta';
 import { coincideEspacio } from './utilidades';
@@ -139,6 +140,12 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                         </p>
                     )}
                     <GoogleCuenta cuenta={cuenta} />
+                    {/* Cuentas por activar: Google manda las 5 invitaciones al correo de ligas para dejarlas listas. */}
+                    {porActivar && (
+                        <div className="mt-2.5">
+                            <GenerarLigas cuenta={cuenta} />
+                        </div>
+                    )}
                     {!vencida && !porActivar && <AvisoBloqueo cuenta={cuenta} />}
                 </div>
 

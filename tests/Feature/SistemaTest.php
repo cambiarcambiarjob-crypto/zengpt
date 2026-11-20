@@ -745,6 +745,70 @@ class SistemaTest extends TestCase
         $this->assertFalse($otra->fresh()->google_conectada);
     }
 
+    public function test_generar_ligas_manda_una_invitacion_por_lugar_libre_al_correo_de_ligas(): void
+    {
+        config(['zengpt.google.correos_ligas' => ['Dueno.Ligas@gmail.com'], 'zengpt.google.cuentas' => ['nueva.ligas@gmail.com']]);
+        $sinSesion = $this->cuenta(['email' => 'sin.sesion@gmail.com']);
+        $cuenta = $this->cuenta(['email' => 'nueva.ligas@gmail.com']);
+        $cuenta->forceFill(['por_activar' => true])->save();
+        $this->assertSame(['dueno.ligas+1@gmail.com', 'dueno.ligas+2@gmail.com'], GrupoGoogle::correosParaLigas(2));
+
+        // El botón: sin sesión de Google no se puede; con sesión, se lanza en segundo plano y no se repite mientras corre.
+        Process::fake();
+        $this->actingAs($this->socio)->post("/cuentas/{$sinSesion->id}/ligas")->assertSessionHas('error');
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/ligas")->assertSessionHas('success');
+        Process::assertRan(fn ($p) => is_string($p->command) && str_contains($p->command, "artisan zenbot:generar-ligas {$cuenta->id}") && str_starts_with($p->command, 'setsid nohup'));
+        $this->assertSame('generando', GrupoGoogle::estadoLigas($cuenta)['estado']);
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/ligas")->assertSessionHas('error', 'Ya se están generando las ligas de esta cuenta: espera a que terminen.');
+        $this->actingAs($this->socio)->get('/cuentas?estado=por_activar')->assertInertia(fn (Assert $p) => $p->where('cuentas.0.google.generando_ligas.estado', 'generando'));
+
+        // La tarea: Google dice que quedan 3 lugares y ya hay una liga (+2): manda +1, +3 y +4.
+        $grupo = json_encode(['ok' => true, 'admin' => 'nueva.ligas@gmail.com', 'quedan' => 3,
+            'miembros' => [['email' => 'nueva.ligas@gmail.com', 'admin' => true], ['email' => 'cliente@gmail.com', 'admin' => false]],
+            'invitaciones' => [['email' => 'dueno.ligas+2@gmail.com', 'caduca' => '4 dic']]]);
+        $invitados = [];
+        Process::fake(function ($p) use ($grupo, &$invitados) {
+            $cmd = (array) $p->command;
+            if (in_array('invitar', $cmd, true)) {
+                $invitados[] = end($cmd);
+
+                return Process::result(json_encode(['ok' => true, 'invitado' => end($cmd)]));
+            }
+
+            return Process::result($grupo);
+        });
+        $this->artisan('zenbot:generar-ligas', ['cuenta' => $cuenta->id])->assertSuccessful();
+        $this->assertSame(['dueno.ligas+1@gmail.com', 'dueno.ligas+3@gmail.com', 'dueno.ligas+4@gmail.com'], $invitados);
+        $estado = GrupoGoogle::estadoLigas($cuenta);
+        $this->assertSame(['listo', 3, 3], [$estado['estado'], $estado['enviadas'], $estado['total']]);
+        $this->assertStringContainsString('3 invitaciones enviadas', $estado['mensaje']);
+        $this->assertSame(1, $cuenta->fresh()->google_ligas);
+        // La cuenta sigue por activar y sin clientes: las ligas no son clientes.
+        $this->assertTrue($cuenta->fresh()->por_activar);
+        $this->assertSame(0, $cuenta->slots()->count());
+
+        // Si Google pone el límite de invitaciones a medio camino, se detiene, lo dice y la cuenta queda bloqueada.
+        $invitados = [];
+        Process::fake(function ($p) use ($grupo, &$invitados) {
+            $cmd = (array) $p->command;
+            if (in_array('invitar', $cmd, true)) {
+                $invitados[] = end($cmd);
+
+                return count($invitados) === 1
+                    ? Process::result(json_encode(['ok' => true, 'invitado' => end($cmd)]))
+                    : Process::result(json_encode(['ok' => false, 'error' => 'limite_invitaciones']), exitCode: 1);
+            }
+
+            return Process::result($grupo);
+        });
+        $this->artisan('zenbot:generar-ligas', ['cuenta' => $cuenta->id])->assertFailed();
+        $estado = GrupoGoogle::estadoLigas($cuenta);
+        $this->assertSame(['error', 1, 3], [$estado['estado'], $estado['enviadas'], $estado['total']]);
+        $this->assertStringContainsString('límite de invitaciones', $estado['mensaje']);
+        $this->assertCount(2, $invitados);
+        $this->assertTrue($cuenta->fresh()->invitacionesBloqueadas());
+    }
+
     public function test_cada_cuenta_abre_su_visor_en_su_propia_pantalla_y_se_cierra_con_la_pestana(): void
     {
         $cuenta = $this->cuenta(['email' => 'jacob@gmail.com']);
