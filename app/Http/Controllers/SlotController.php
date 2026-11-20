@@ -48,7 +48,16 @@ class SlotController extends Controller
             return $cuenta->slots()->create($data + $invitacion + ['position' => $posicion, 'paid_on' => $pendiente ? null : $data['sold_on'], 'created_by' => $request->user()->id]);
         });
 
-        // «Invitar en Google al guardar» (cuentas con sesión abierta en el servidor).
+        // Con liga en su espacio: se le manda su liga por correo (los lugares de Google ya están ocupados con las ligas).
+        if ($creado !== null && $request->boolean('enviar_liga') && $creado->invite_url !== null) {
+            $error = $this->mandarLiga($creado);
+
+            return $error === null
+                ? back()->with('success', "Cliente agregado y su liga enviada por correo a {$creado->client_email}.")
+                : back()->with('error', "Cliente agregado, pero no se pudo mandar el correo: {$error}");
+        }
+
+        // «Invitar en Google al guardar» (cuentas con sesión abierta en el servidor y espacio sin liga).
         if ($creado !== null && $request->boolean('invitar_google') && GrupoGoogle::conectada($account)) {
             try {
                 app(GrupoGoogle::class)->invitar($creado);
@@ -116,16 +125,26 @@ class SlotController extends Controller
     /** Manda al cliente el correo con su liga (botón verde) y marca la invitación como enviada. */
     public function enviarCorreo(Slot $slot): RedirectResponse
     {
+        $error = $this->mandarLiga($slot);
+
+        return $error === null
+            ? back()->with('success', "Invitación enviada a {$slot->client_email}.")
+            : back()->with('error', $error);
+    }
+
+    /** Manda al cliente su liga por correo (el de botón verde) y la marca enviada. Devuelve el error, o null si salió. */
+    private function mandarLiga(Slot $slot): ?string
+    {
         if ($slot->invite_url === null) {
-            return back()->with('error', 'Primero guarda la liga de invitación de este cliente.');
+            return 'Primero guarda la liga de invitación de este cliente.';
         }
 
         if ($slot->inviteStatus() === 'caducada') {
-            return back()->with('error', 'La liga ya caducó: genera una nueva en Google y guárdala.');
+            return 'La liga ya caducó: genera una nueva y guárdala.';
         }
 
         if (app()->isProduction() && in_array(config('mail.default'), ['log', 'array'], true)) {
-            return back()->with('error', 'El correo de envío todavía no está configurado en el servidor.');
+            return 'El correo de envío todavía no está configurado en el servidor.';
         }
 
         try {
@@ -133,12 +152,12 @@ class SlotController extends Controller
         } catch (\Throwable $e) {
             report($e);
 
-            return back()->with('error', 'No se pudo enviar el correo. Intenta de nuevo en unos minutos.');
+            return 'No se pudo enviar el correo. Intenta de nuevo en unos minutos.';
         }
 
         $slot->update(['invite_sent_at' => now()]);
 
-        return back()->with('success', "Invitación enviada a {$slot->client_email}.");
+        return null;
     }
 
     /** Marca el pago del cliente (cuenta como venta en esa fecha; hoy por defecto) o lo regresa a pendiente. */

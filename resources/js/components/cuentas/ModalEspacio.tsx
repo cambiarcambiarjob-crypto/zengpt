@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { Boton } from '@/components/ui/Boton';
 import { Campo } from '@/components/ui/Campo';
 import { CasillaGoogle } from '@/components/ui/CasillaGoogle';
+import { CasillaLiga } from '@/components/ui/CasillaLiga';
 import { CasillaPendiente } from '@/components/ui/CasillaPendiente';
 import { Modal } from '@/components/ui/Modal';
 import { Selector, type OpcionSelector } from '@/components/ui/Selector';
@@ -37,6 +38,10 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
     // Llegó solo desde Google: precio y vendedor se completan después (no son obligatorios).
     const deGoogle = espacio?.origen === 'google';
     const sinPrecio = deGoogle && espacio?.price_cents === 0 && espacio?.seller_id === null;
+    // Espacio que le toca al cliente nuevo y su liga (si la cuenta ya la tiene capturada y vigente).
+    const posicionLibre = Array.from({ length: cuenta.capacidad }, (_, i) => i + 1).find((p) => !cuenta.espacios.some((e) => e.position === p));
+    const ligaLibre = cuenta.invite_links.find((l) => l.position === posicionLibre && l.url && (!l.expires_on || l.expires_on >= negocio.hoy)) ?? null;
+
     const form = useForm(() => {
         const recordado = leerUltimoVendedor();
 
@@ -55,8 +60,9 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                     : '',
             sold_on: espacio?.sold_on ?? negocio.hoy,
             pendiente: espacio ? !espacio.paid_on : false,
-            // Si la cuenta tiene ligas por mandar, al cliente se le manda la liga: no se invita su correo.
-            invitar_google: !espacio && cuenta.google.conectada && cuenta.google.ligas === 0,
+            // Con liga en su espacio se le manda la liga por correo; sin liga (y con Google conectado), se le invita por Google.
+            enviar_liga: !espacio && ligaLibre !== null,
+            invitar_google: !espacio && ligaLibre === null && cuenta.google.conectada && cuenta.google.ligas === 0,
         };
     });
 
@@ -190,7 +196,15 @@ export function ModalEspacio({ cuenta, espacio, vendedores, alCerrar, alGuardar,
                 />
 
                 <CasillaPendiente marcada={form.data.pendiente} alCambiar={(valor) => form.setData('pendiente', valor)} className="sm:col-span-5" />
-                {!editando && cuenta.google.conectada && (
+                {!editando && ligaLibre && (
+                    <CasillaLiga
+                        marcada={form.data.enviar_liga}
+                        alCambiar={(valor) => form.setData('enviar_liga', valor)}
+                        espacio={posicionLibre ?? 1}
+                        className="sm:col-span-5"
+                    />
+                )}
+                {!editando && !ligaLibre && cuenta.google.conectada && (
                     <CasillaGoogle
                         marcada={form.data.invitar_google}
                         alCambiar={(valor) => form.setData('invitar_google', valor)}

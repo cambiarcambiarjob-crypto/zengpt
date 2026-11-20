@@ -84,8 +84,18 @@ export const CasillaOcupada = memo(function CasillaOcupada({ cuenta, espacio, ho
             </div>
 
             <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-                {/* Cuenta con su sesión de Google en el servidor: una sola invitación, la de Google. */}
-                {cuenta.google.conectada ? <GoogleEspacio cuenta={cuenta} espacio={espacio} /> : <InvitacionEspacio espacio={espacio} />}
+                {/* Con liga: se le manda su liga por correo (Google ya tiene sus lugares ocupados con las ligas); de Google solo
+                    queda «Sacar». Sin liga y con sesión de Google en el servidor: la invitación de Google. */}
+                {espacio.invite_url ? (
+                    <>
+                        <InvitacionEspacio espacio={espacio} />
+                        {cuenta.google.conectada && <GoogleEspacio cuenta={cuenta} espacio={espacio} soloSacar />}
+                    </>
+                ) : cuenta.google.conectada ? (
+                    <GoogleEspacio cuenta={cuenta} espacio={espacio} />
+                ) : (
+                    <InvitacionEspacio espacio={espacio} />
+                )}
             </div>
 
             {/* Angosta (celular): teléfono y venta en un mismo renglón. Con más ancho, uno bajo el otro y la venta al pie. */}

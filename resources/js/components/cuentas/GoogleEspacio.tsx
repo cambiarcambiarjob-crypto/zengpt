@@ -18,7 +18,7 @@ const ESTADO = {
  * Invitación al grupo familiar en cuentas con su sesión de Google abierta en el servidor: el estado según Google
  * y el botón para invitarlo o sacarlo. Sacar pide confirmación, quita al cliente de Google y libera su espacio.
  */
-export function GoogleEspacio({ cuenta, espacio }: { cuenta: Cuenta; espacio: Espacio }) {
+export function GoogleEspacio({ cuenta, espacio, soloSacar = false }: { cuenta: Cuenta; espacio: Espacio; soloSacar?: boolean }) {
     const [confirmando, setConfirmando] = useState(false);
     const [trabajando, setTrabajando] = useState(false);
 
@@ -26,8 +26,11 @@ export function GoogleEspacio({ cuenta, espacio }: { cuenta: Cuenta; espacio: Es
     const estado = ESTADO[espacio.google_status === 'miembro' ? 'miembro' : espacio.google_status === 'invitado' ? 'invitado' : 'fuera'];
     const opciones = { preserveScroll: true, preserveState: true, onStart: () => setTrabajando(true), onFinish: () => { setTrabajando(false); setConfirmando(false); } };
 
+    // Clientes con liga: el estado lo da su liga; aquí solo «Sacar» cuando ya está en el grupo (o invitado) en Google.
+    if (soloSacar && !dentro) return null;
+
     // Sin invitar y con el bloqueo de Google: no se puede invitar todavía (en vez de «Sin invitar» + «Invitar»).
-    if (!dentro && cuenta.google.bloqueo_hasta) {
+    if (!soloSacar && !dentro && cuenta.google.bloqueo_hasta) {
         return (
             <span className={cn(ETIQUETA, 'gap-1 border-peligro/40 bg-peligro/10 text-peligro')} title="Invitación inválida por Google: no deja invitar a nadie más a esta cuenta por ahora (límite de invitaciones). Invítalo cuando se libere.">
                 <Ban className="size-3" aria-hidden="true" />
@@ -38,9 +41,11 @@ export function GoogleEspacio({ cuenta, espacio }: { cuenta: Cuenta; espacio: Es
 
     return (
         <>
-            <span className={cn(ETIQUETA, estado.clase)} title="Según la última revisión del grupo en Google">
-                {estado.texto}
-            </span>
+            {!soloSacar && (
+                <span className={cn(ETIQUETA, estado.clase)} title="Según la última revisión del grupo en Google">
+                    {estado.texto}
+                </span>
+            )}
             {dentro ? (
                 <button type="button" disabled={trabajando} onClick={() => setConfirmando(true)} className={`${BOTON} border-borde-fuerte text-suave hover:border-peligro/50 hover:text-peligro`} title="Lo saca del grupo de Google y libera su espacio">
                     <UserX className="size-3" aria-hidden="true" />

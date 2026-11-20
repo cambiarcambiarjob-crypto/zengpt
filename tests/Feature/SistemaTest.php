@@ -277,6 +277,29 @@ class SistemaTest extends TestCase
         $this->assertStringContainsString('cliente@gmail.com', $html);
     }
 
+    public function test_con_sus_5_ligas_al_cliente_se_le_manda_su_liga_por_correo_y_no_se_le_invita_por_google(): void
+    {
+        Mail::fake();
+        Process::fake();
+        config(['zengpt.google.cuentas' => ['jacob.ligas@gmail.com']]);
+        $vence = Hoy::carbon()->addDays(10)->toDateString();
+        $cuenta = $this->cuenta(['email' => 'jacob.ligas@gmail.com', 'invite_links' => collect(range(1, 5))->mapWithKeys(fn ($p) => [(string) $p => ['url' => "https://families.google.com/join/promo/LIGA{$p}", 'expires_on' => $vence]])->all()]);
+        $jorge = $this->vendedor('Jorge');
+
+        // Cuenta conectada a Google y con liga en el espacio: se manda la liga por correo, no se invita por Google.
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", ['client_email' => 'cliente1@gmail.com', 'price' => 400, 'seller_id' => $jorge->id, 'sold_on' => Hoy::fecha(), 'enviar_liga' => true, 'invitar_google' => true])
+            ->assertSessionHas('success', 'Cliente agregado y su liga enviada por correo a cliente1@gmail.com.');
+        $slot = Slot::query()->where('client_email', 'cliente1@gmail.com')->firstOrFail();
+        $this->assertSame(['https://families.google.com/join/promo/LIGA1', 'enviada'], [$slot->invite_url, $slot->inviteStatus()]);
+        Mail::assertSent(InvitacionGrupo::class, fn ($m) => $m->hasTo('cliente1@gmail.com'));
+        Process::assertDidntRun(fn ($p) => in_array('invitar', (array) $p->command, true));
+
+        // Sin marcar la casilla, se agrega con su liga lista para mandarla después.
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/espacios", ['client_email' => 'cliente2@gmail.com', 'price' => 400, 'seller_id' => $jorge->id, 'sold_on' => Hoy::fecha()])->assertSessionHas('success');
+        $this->assertSame(['https://families.google.com/join/promo/LIGA2', 'lista'], [Slot::query()->where('client_email', 'cliente2@gmail.com')->first()->invite_url, Slot::query()->where('client_email', 'cliente2@gmail.com')->first()->inviteStatus()]);
+        Mail::assertSentCount(1);
+    }
+
     public function test_al_agregar_cliente_se_puede_guardar_ya_su_liga(): void
     {
         $cuenta = $this->cuenta();
