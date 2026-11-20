@@ -80,6 +80,53 @@ export interface DiaProps {
     conEspacio: Cuenta[];
 }
 
-export interface ReportesProps { desde: string; hasta: string; filas: FilaVendedor[]; totales: Totales; serie: DiaSerie[] }
+/** Lo que el dueño le debe HOY a un vendedor: su parte acumulada menos lo ya pagado (no depende del periodo elegido). */
+export interface EstadoPago {
+    pendiente: number;
+    /** Primer día sin pagar (el siguiente al último pago, o su primer movimiento); null si nunca ha tenido movimiento. */
+    desde: string | null;
+    /** Cambios en días ya pagados (ventas o publicidad capturadas después del pago); ya va incluido en `pendiente`. */
+    ajuste: number;
+    ultimo: { hasta: string; paid_on: string; amount_cents: number } | null;
+}
+
+export interface ReportesProps {
+    desde: string; hasta: string; filas: FilaVendedor[]; totales: Totales; serie: DiaSerie[];
+    /** Por pagar a cada vendedor (sin el dueño). */
+    pagos: (EstadoPago & { seller_id: number; name: string; active: boolean })[];
+}
+
+/** Reparto de un vendedor más `parte`: lo que le toca a él (al dueño, la parte del dueño). */
+export interface RepartoVendedor extends Totales { parte: number }
+
+export interface DiaVendedor extends RepartoVendedor {
+    fecha: string;
+    /** El pago que ya cubre ese día, o null si sigue por pagar. */
+    pago: { id: number; paid_on: string } | null;
+}
+
+export interface PagoVendedor {
+    id: number;
+    /** Primer día que cubre (null = desde el inicio). */
+    desde: string | null;
+    hasta: string; paid_on: string; amount_cents: number; notes: string | null; registrado_por: string | null;
+    /** Solo el último pago se puede deshacer. */
+    puede_borrar: boolean;
+}
+
+export interface VendedorReporteProps {
+    vendedor: { id: number; name: string; is_owner: boolean; active: boolean };
+    vendedores: Vendedor[];
+    desde: string; hasta: string;
+    hoyVendedor: RepartoVendedor;
+    periodo: RepartoVendedor;
+    /** Días del periodo con movimiento. */
+    dias: DiaVendedor[];
+    /** null para el dueño (a él no se le registran pagos). `cortes`: cuánto se le debería si se le paga hasta cada día sin pagar. */
+    pago: (EstadoPago & { cortes: { fecha: string; por_pagar: number }[] }) | null;
+    pagos: PagoVendedor[];
+    /** Administrador y no es el dueño. */
+    puedePagar: boolean;
+}
 
 export interface VendedoresProps { vendedores: { id: number; name: string; is_owner: boolean; active: boolean; ventas_count: number }[] }

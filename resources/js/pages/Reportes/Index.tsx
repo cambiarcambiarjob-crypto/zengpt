@@ -6,7 +6,8 @@ import { DatosPeriodo } from '@/components/reportes/DatosPeriodo';
 import { DetalleReporte } from '@/components/reportes/DetalleReporte';
 import { FiltroPeriodo } from '@/components/reportes/FiltroPeriodo';
 import { GraficaDias } from '@/components/reportes/GraficaDias';
-import { atajosDePeriodo, capitalizar, diasDelRango } from '@/components/reportes/periodos';
+import { PagosVendedores } from '@/components/reportes/PagosVendedores';
+import { atajosDePeriodo, capitalizar, diasDelRango, periodoEnPalabras } from '@/components/reportes/periodos';
 import { RankingVendedores } from '@/components/reportes/RankingVendedores';
 import { ResumenPeriodo } from '@/components/reportes/ResumenPeriodo';
 import { Aparecer } from '@/components/ui/Aparecer';
@@ -16,29 +17,16 @@ import { EstadoVacio } from '@/components/ui/EstadoVacio';
 import { Tarjeta } from '@/components/ui/Tarjeta';
 import AppLayout from '@/layouts/AppLayout';
 import { cn } from '@/lib/cn';
-import { aFecha, fechaLarga, fechaMedia, plural } from '@/lib/formato';
+import { plural } from '@/lib/formato';
 import { usePagina } from '@/lib/pagina';
 import type { ReportesProps } from '@/types';
-
-/** «Lunes 16 de noviembre de 2026» para un día; «1 – 16 de noviembre de 2026» o «28 de octubre – 16 de noviembre de 2026» para un rango. */
-function periodoEnPalabras(desde: string, hasta: string): string {
-    if (desde === hasta) return capitalizar(fechaLarga(desde, { anio: true }));
-
-    const [inicio, fin] = [aFecha(desde), aFecha(hasta)];
-    if (inicio.getFullYear() !== fin.getFullYear()) return `${fechaMedia(desde)} – ${fechaMedia(hasta)}`;
-
-    // fechaMedia = «16 de noviembre de 2026»: del inicio solo hace falta lo que cambia (el día, o el día y el mes).
-    const partes = fechaMedia(desde).split(' de ');
-
-    return `${inicio.getMonth() === fin.getMonth() ? partes[0] : `${partes[0]} de ${partes[1]}`} – ${fechaMedia(hasta)}`;
-}
 
 /**
  * Reportes: se elige un periodo y la pantalla contesta, de arriba abajo, cuánto se vendió y cuánto quedó, quién vendió
  * más (el ranking), cómo se movieron los días (la gráfica) y el detalle con totales, que se puede exportar a CSV.
  */
 export default function ReportesIndex() {
-    const { desde, hasta, filas, totales, serie, negocio, auth } = usePagina<ReportesProps>();
+    const { desde, hasta, filas, totales, serie, pagos, negocio, auth } = usePagina<ReportesProps>();
     const { url } = usePage();
     const [cargando, setCargando] = useState(false);
 
@@ -95,6 +83,11 @@ export default function ReportesIndex() {
                     <ResumenPeriodo totales={totales} dias={dias} dueno={capitalizar(dueno)} esAdmin={esAdmin} porcentajeSocio={negocio.porcentaje_socio} />
                 </Aparecer>
 
+                {/* Lo que se le debe hoy a cada vendedor: no depende del periodo elegido. */}
+                <Aparecer indice={1} className="xl:col-span-12">
+                    <PagosVendedores pagos={pagos} hoy={negocio.hoy} />
+                </Aparecer>
+
                 {sinMovimiento ? (
                     <Aparecer indice={1} className="xl:col-span-12">
                         <Tarjeta>
@@ -117,7 +110,14 @@ export default function ReportesIndex() {
                 ) : (
                     <>
                         <Aparecer indice={1} className="xl:col-span-12">
-                            <RankingVendedores filas={filas} totales={totales} dueno={capitalizar(dueno)} porcentajeSocio={negocio.porcentaje_socio} porcentajeVendedor={negocio.porcentaje_vendedor} />
+                            <RankingVendedores
+                                filas={filas}
+                                totales={totales}
+                                dueno={capitalizar(dueno)}
+                                porcentajeSocio={negocio.porcentaje_socio}
+                                porcentajeVendedor={negocio.porcentaje_vendedor}
+                                hrefVendedor={(id) => `/reportes/vendedores/${id}?desde=${desde}&hasta=${hasta}`}
+                            />
                         </Aparecer>
                         <Aparecer indice={2} className="xl:col-span-8">
                             <GraficaDias className="h-full" serie={serie} desde={desde} hoy={negocio.hoy} />

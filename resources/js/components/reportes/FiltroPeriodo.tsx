@@ -4,7 +4,7 @@ import { Boton } from '@/components/ui/Boton';
 import { Campo } from '@/components/ui/Campo';
 import { Pestanas } from '@/components/ui/Pestanas';
 import { cn } from '@/lib/cn';
-import { atajoActivo, atajosDePeriodo } from './periodos';
+import { type Atajo, atajoActivo, atajosDePeriodo, urlReporte } from './periodos';
 
 export interface FiltroPeriodoProps {
     /** Rango que muestra el reporte (el servidor ya lo validó y ordenó). */
@@ -16,6 +16,10 @@ export interface FiltroPeriodoProps {
     url: string;
     /** true mientras llega el reporte del rango nuevo. */
     cargando?: boolean;
+    /** Pantalla a la que navega (por omisión '/reportes'; la de un vendedor usa '/reportes/vendedores/{id}'). */
+    base?: string;
+    /** Atajos propios de la pantalla, antes de los de siempre (p. ej. «Sin pagar» en la de un vendedor). */
+    extras?: Omit<Atajo, 'href'>[];
     className?: string;
 }
 
@@ -23,8 +27,11 @@ export interface FiltroPeriodoProps {
  * Filtro del reporte: atajos (Hoy, Esta semana, Este mes, Mes pasado, Últimos 90 días) con la píldora de PillNav y un
  * rango a mano con dos fechas. Todo navega a /reportes?desde=…&hasta=… conservando el desplazamiento.
  */
-export function FiltroPeriodo({ desde, hasta, hoy, url, cargando = false, className }: FiltroPeriodoProps) {
-    const atajos = useMemo(() => atajosDePeriodo(hoy), [hoy]);
+export function FiltroPeriodo({ desde, hasta, hoy, url, cargando = false, base = '/reportes', extras, className }: FiltroPeriodoProps) {
+    const atajos = useMemo(
+        () => [...(extras ?? []).map((atajo) => ({ ...atajo, href: urlReporte(atajo.desde, atajo.hasta, atajo.clave, base) })), ...atajosDePeriodo(hoy, base)],
+        [hoy, base, extras],
+    );
     const activo = atajoActivo(atajos, desde, hasta, url);
     const [campos, setCampos] = useState({ desde, hasta });
     const [errores, setErrores] = useState<{ desde?: string; hasta?: string }>({});
@@ -46,7 +53,7 @@ export function FiltroPeriodo({ desde, hasta, hoy, url, cargando = false, classN
 
         // Si las fechas vienen al revés se acomodan (el servidor haría lo mismo).
         const [inicio, fin] = campos.desde <= campos.hasta ? [campos.desde, campos.hasta] : [campos.hasta, campos.desde];
-        router.get('/reportes', { desde: inicio, hasta: fin }, { preserveState: true, preserveScroll: true });
+        router.get(base, { desde: inicio, hasta: fin }, { preserveState: true, preserveScroll: true });
     };
 
     return (

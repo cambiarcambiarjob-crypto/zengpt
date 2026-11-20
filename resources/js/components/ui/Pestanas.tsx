@@ -47,7 +47,7 @@ export function Pestanas<V extends string = string>({ opciones, activa, alCambia
         <div className={cn('max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)}>
             <PillNav
                 items={items}
-                activeHref={actual ? (actual.href ?? `#${actual.valor}`) : undefined}
+                activeHref={actual ? (actual.href ?? `#${actual.valor}`) : ''}
                 linkComponent={EnlacePestana}
                 onItemClick={(_item, indice, evento: MouseEvent<HTMLElement>) => {
                     const opcion = opciones[indice];

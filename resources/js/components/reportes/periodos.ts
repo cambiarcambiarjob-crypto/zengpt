@@ -1,4 +1,4 @@
-import { aFecha, aIso, diasEntre, fechaCorta, fechaLarga, sumarDias } from '@/lib/formato';
+import { aFecha, aIso, diasEntre, fechaCorta, fechaLarga, fechaMedia, sumarDias } from '@/lib/formato';
 import type { DiaSerie } from '@/types';
 
 /** «lunes 16 de noviembre» → «Lunes 16 de noviembre». */
@@ -16,7 +16,7 @@ export function proporcion(parte: number, total: number): number {
     return total > 0 ? Math.round((parte / total) * 100) : 0;
 }
 
-export type ClaveAtajo = 'hoy' | 'semana' | 'mes' | 'mes_pasado' | 'ultimos_90';
+export type ClaveAtajo = 'sin_pagar' | 'hoy' | 'semana' | 'mes' | 'mes_pasado' | 'ultimos_90';
 
 export interface Atajo {
     clave: ClaveAtajo;
@@ -27,12 +27,12 @@ export interface Atajo {
 }
 
 /** URL literal del reporte de un rango. `atajo` solo distingue dos atajos que coinciden (un lunes, «Hoy» y «Esta semana»). */
-export function urlReporte(desde: string, hasta: string, atajo?: ClaveAtajo): string {
-    return `/reportes?desde=${desde}&hasta=${hasta}${atajo ? `&atajo=${atajo}` : ''}`;
+export function urlReporte(desde: string, hasta: string, atajo?: ClaveAtajo, base = '/reportes'): string {
+    return `${base}?desde=${desde}&hasta=${hasta}${atajo ? `&atajo=${atajo}` : ''}`;
 }
 
 /** Rangos rápidos calculados desde el «hoy» del negocio (props.negocio.hoy), nunca desde el reloj del navegador. */
-export function atajosDePeriodo(hoy: string): Atajo[] {
+export function atajosDePeriodo(hoy: string, base = '/reportes'): Atajo[] {
     const fecha = aFecha(hoy);
     const desdeLunes = (fecha.getDay() + 6) % 7; // la semana empieza en lunes
     const rangos: [ClaveAtajo, string, string, string][] = [
@@ -43,11 +43,11 @@ export function atajosDePeriodo(hoy: string): Atajo[] {
         ['ultimos_90', 'Últimos 90 días', sumarDias(hoy, -89), hoy],
     ];
 
-    return rangos.map(([clave, etiqueta, desde, hasta]) => ({ clave, etiqueta, desde, hasta, href: urlReporte(desde, hasta, clave) }));
+    return rangos.map(([clave, etiqueta, desde, hasta]) => ({ clave, etiqueta, desde, hasta, href: urlReporte(desde, hasta, clave, base) }));
 }
 
 /** Si dos atajos cubren el mismo rango y la URL no dice cuál se eligió, gana el más amplio (así se llega a /reportes: «Este mes»). */
-const PRIORIDAD: ClaveAtajo[] = ['mes', 'semana', 'hoy', 'mes_pasado', 'ultimos_90'];
+const PRIORIDAD: ClaveAtajo[] = ['sin_pagar', 'mes', 'semana', 'hoy', 'mes_pasado', 'ultimos_90'];
 
 /** Atajo que corresponde al rango en pantalla, o null si es un rango elegido a mano. */
 export function atajoActivo(atajos: Atajo[], desde: string, hasta: string, url: string): Atajo | null {
@@ -138,4 +138,17 @@ export function tituloDeCubo(cubo: Cubo, agrupacion: Agrupacion, hoy: string): s
     const fecha = aFecha(cubo.desde);
 
     return `${capitalizar(MESES[fecha.getMonth()])} de ${fecha.getFullYear()}`;
+}
+
+/** «Lunes 16 de noviembre de 2026» para un día; «1 – 16 de noviembre de 2026» o «28 de octubre – 16 de noviembre de 2026» para un rango. */
+export function periodoEnPalabras(desde: string, hasta: string): string {
+    if (desde === hasta) return capitalizar(fechaLarga(desde, { anio: true }));
+
+    const [inicio, fin] = [aFecha(desde), aFecha(hasta)];
+    if (inicio.getFullYear() !== fin.getFullYear()) return `${fechaMedia(desde)} – ${fechaMedia(hasta)}`;
+
+    // fechaMedia = «16 de noviembre de 2026»: del inicio solo hace falta lo que cambia (el día, o el día y el mes).
+    const partes = fechaMedia(desde).split(' de ');
+
+    return `${inicio.getMonth() === fin.getMonth() ? partes[0] : `${partes[0]} de ${partes[1]}`} – ${fechaMedia(hasta)}`;
 }

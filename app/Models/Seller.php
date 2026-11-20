@@ -20,6 +20,12 @@ class Seller extends Model
         return $this->hasMany(Slot::class);
     }
 
+    /** Pagos que el dueño le ha hecho (su parte de las ventas). */
+    public function payouts(): HasMany
+    {
+        return $this->hasMany(SellerPayout::class)->orderBy('hasta');
+    }
+
     public function scopeOrdered(Builder $query): Builder
     {
         return $query->orderBy('sort')->orderBy('id');

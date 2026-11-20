@@ -431,6 +431,76 @@ class SistemaTest extends TestCase
         $this->assertContains('sinprecio@gmail.com', $correos('/cuentas?estado=por_cobrar'));
     }
 
+    public function test_cada_vendedor_tiene_su_pantalla_y_sus_pagos_semanales(): void
+    {
+        $cuenta = $this->cuenta();
+        $jorge = $this->vendedor('Jorge');
+        $leo = $this->vendedor('Leo');
+        $diaA = Hoy::carbon()->subDays(8)->toDateString();
+        $diaB = Hoy::carbon()->subDays(3)->toDateString();
+        $venta = function (int $pos, int $precio, string $pagado) use ($cuenta, $jorge): void {
+            Slot::query()->create(['account_id' => $cuenta->id, 'position' => $pos, 'client_email' => "v{$pos}@gmail.com", 'price_cents' => $precio, 'seller_id' => $jorge->id, 'sold_on' => $pagado, 'paid_on' => $pagado]);
+        };
+        // Día A: 2 × $200 con $100 de publicidad → su parte $113.94. Día B: 1 × $400 → $169.47.
+        $venta(1, 20000, $diaA);
+        $venta(2, 20000, $diaA);
+        AdSpend::query()->create(['spent_on' => $diaA, 'seller_id' => $jorge->id, 'amount_cents' => 10000]);
+        $venta(3, 40000, $diaB);
+
+        $pantalla = fn (User $u) => $this->actingAs($u)->get("/reportes/vendedores/{$jorge->id}");
+        $pantalla($this->socio)->assertInertia(fn (Assert $p) => $p
+            ->component('Reportes/Vendedor')
+            ->where('vendedor.name', 'Jorge')->where('puedePagar', false)
+            ->where('desde', $diaA)->has('dias', 2)
+            ->where('dias.0.fecha', $diaA)->where('dias.0.ventas_count', 2)->where('dias.0.parte', 11394)->where('dias.0.pago', null)
+            ->where('dias.1.parte', 16947)
+            ->where('periodo.parte', 28341)->where('hoyVendedor.ventas_count', 0)
+            ->where('pago.pendiente', 28341)->where('pago.desde', $diaA)->where('pago.ultimo', null)
+            ->where('pago.cortes', [['fecha' => $diaA, 'por_pagar' => 11394], ['fecha' => $diaB, 'por_pagar' => 28341]]));
+
+        // Solo el administrador registra pagos.
+        $this->actingAs($this->socio)->post("/reportes/vendedores/{$jorge->id}/pagos", ['hasta' => $diaA])->assertForbidden();
+
+        // Paga lo acumulado hasta el día A (sin monto: exactamente lo que se le debe).
+        $this->actingAs($this->admin)->post("/reportes/vendedores/{$jorge->id}/pagos", ['hasta' => $diaA, 'notes' => 'Transferencia'])->assertSessionHas('success');
+        $this->assertSame(11394, $jorge->payouts()->first()->amount_cents);
+        $this->assertSame(Hoy::fecha(), $jorge->payouts()->first()->paid_on->toDateString());
+        // Sin fechas, la pantalla abre desde el primer día sin pagar; con el rango completo se ve qué días ya se pagaron.
+        $pantalla($this->admin)->assertInertia(fn (Assert $p) => $p->where('desde', Carbon::parse($diaA)->addDay()->toDateString())->has('dias', 1));
+        $this->actingAs($this->admin)->get("/reportes/vendedores/{$jorge->id}?desde={$diaA}&hasta=".Hoy::fecha())->assertInertia(fn (Assert $p) => $p
+            ->where('puedePagar', true)
+            ->where('pago.pendiente', 16947)->where('pago.desde', Carbon::parse($diaA)->addDay()->toDateString())->where('pago.ajuste', 0)
+            ->where('pago.ultimo.amount_cents', 11394)
+            ->where('dias.0.pago.paid_on', Hoy::fecha())->where('dias.1.pago', null)
+            ->has('pagos', 1)->where('pagos.0.desde', null)->where('pagos.0.hasta', $diaA)->where('pagos.0.notes', 'Transferencia'));
+
+        // No se paga dos veces el mismo tramo ni días que no han pasado.
+        $this->actingAs($this->admin)->post("/reportes/vendedores/{$jorge->id}/pagos", ['hasta' => $diaA])->assertSessionHasErrors('hasta');
+        $this->actingAs($this->admin)->post("/reportes/vendedores/{$jorge->id}/pagos", ['hasta' => Hoy::carbon()->addDay()->toDateString()])->assertSessionHasErrors('hasta');
+
+        // Una venta que se marca pagada con fecha de un día ya pagado se arrastra como ajuste al siguiente pago.
+        $venta(4, 20000, $diaA);
+        $pantalla($this->admin)->assertInertia(fn (Assert $p) => $p->where('pago.ajuste', 7947)->where('pago.pendiente', 24894));
+
+        // Pago parcial: lo que falta queda para el siguiente.
+        $this->actingAs($this->admin)->post("/reportes/vendedores/{$jorge->id}/pagos", ['hasta' => Hoy::fecha(), 'monto' => 200])->assertSessionHas('success');
+        $this->actingAs($this->admin)->get('/reportes')->assertInertia(fn (Assert $p) => $p
+            ->has('pagos', 3)->where('pagos.0.name', 'Jorge')->where('pagos.0.pendiente', 4894)->where('pagos.0.ultimo.amount_cents', 20000)
+            ->missing('pagos.0.cortes'));
+
+        // Solo se deshace el último pago.
+        [$primero, $segundo] = $jorge->payouts()->get()->all();
+        $this->actingAs($this->admin)->delete("/pagos-vendedores/{$primero->id}")->assertSessionHas('error');
+        $this->actingAs($this->socio)->delete("/pagos-vendedores/{$segundo->id}")->assertForbidden();
+        $this->actingAs($this->admin)->delete("/pagos-vendedores/{$segundo->id}")->assertSessionHas('success');
+        $pantalla($this->admin)->assertInertia(fn (Assert $p) => $p->where('pago.pendiente', 24894)->has('pagos', 1)->where('pagos.0.puede_borrar', true));
+
+        // Al dueño no se le registran pagos: su pantalla solo tiene métricas.
+        $this->actingAs($this->admin)->get("/reportes/vendedores/{$leo->id}")->assertInertia(fn (Assert $p) => $p->where('pago', null)->where('puedePagar', false)->has('pagos', 0));
+        $this->actingAs($this->admin)->post("/reportes/vendedores/{$leo->id}/pagos", ['hasta' => Hoy::fecha()])->assertSessionHas('error');
+        $this->assertSame(0, $leo->payouts()->count());
+    }
+
     public function test_el_limite_de_invitaciones_de_google_bloquea_los_espacios_libres_con_cuenta_regresiva(): void
     {
         $this->freezeSecond();

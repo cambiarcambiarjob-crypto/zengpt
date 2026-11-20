@@ -1,3 +1,4 @@
+import { Link } from '@inertiajs/react';
 import { Trophy, Users } from 'lucide-react';
 import { useMemo } from 'react';
 import ShinyText from '@/components/reactbits/ShinyText';
@@ -18,6 +19,8 @@ export interface RankingVendedoresProps {
     dueno: string;
     porcentajeSocio: number;
     porcentajeVendedor: number;
+    /** Liga a la pantalla de cada vendedor (sus métricas por día y sus pagos). */
+    hrefVendedor?: (sellerId: number) => string;
     className?: string;
 }
 
@@ -47,7 +50,7 @@ function Monto({ centavos, fuerte = false }: { centavos: number; fuerte?: boolea
  * Ranking del periodo: un renglón por vendedor, ordenado por monto vendido, con su barra (y la de publicidad a la misma
  * escala), el número de ventas, el neto y lo que le toca. «¿Cuánto ha vendido Jorge?» se contesta de un vistazo.
  */
-export function RankingVendedores({ filas, totales, dueno, porcentajeSocio, porcentajeVendedor, className }: RankingVendedoresProps) {
+export function RankingVendedores({ filas, totales, dueno, porcentajeSocio, porcentajeVendedor, hrefVendedor, className }: RankingVendedoresProps) {
     const listo = useEntrada();
     const ordenadas = useMemo(() => [...filas].sort((a, b) => b.ventas - a.ventas || b.ventas_count - a.ventas_count || b.neto - a.neto), [filas]);
     const tope = Math.max(1, ...filas.map((fila) => Math.max(fila.ventas, fila.publicidad)));
@@ -87,11 +90,25 @@ export function RankingVendedores({ filas, totales, dueno, porcentajeSocio, porc
                                         </span>
                                         <div className="min-w-0 flex-1">
                                             <p className="flex min-w-0 items-center gap-2">
-                                                {lider ? (
-                                                    <ShinyText text={fila.name} color="#e8eeeb" shineColor="#34d8a6" speed={2.2} delay={6} className="truncate text-sm font-semibold" />
-                                                ) : (
-                                                    <span className="truncate text-sm font-medium text-texto">{fila.name}</span>
-                                                )}
+                                                {(() => {
+                                                    const nombre = lider ? (
+                                                        <ShinyText text={fila.name} color="#e8eeeb" shineColor="#34d8a6" speed={2.2} delay={6} className="truncate text-sm font-semibold" />
+                                                    ) : (
+                                                        <span className="truncate text-sm font-medium text-texto">{fila.name}</span>
+                                                    );
+
+                                                    return hrefVendedor ? (
+                                                        <Link
+                                                            href={hrefVendedor(fila.seller_id)}
+                                                            className="min-w-0 truncate rounded-sm underline decoration-borde-fuerte underline-offset-4 transition-colors hover:decoration-acento/60"
+                                                            title={`Ver las métricas y pagos de ${fila.name}`}
+                                                        >
+                                                            {nombre}
+                                                        </Link>
+                                                    ) : (
+                                                        nombre
+                                                    );
+                                                })()}
                                                 {lider && (
                                                     <Insignia estado="acento" tamano="sm" sinPunto>
                                                         <Trophy className="size-3" aria-hidden="true" />

@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Seller;
+use App\Services\PagosVendedor;
 use App\Services\Resumen;
 use App\Support\Hoy;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -33,6 +36,10 @@ class ReportController extends Controller
             'filas' => $resumen['filas'],
             'totales' => $resumen['totales'],
             'serie' => Resumen::serieDiaria($inicioSerie, $hasta),
+            // Lo que se le debe hoy a cada vendedor (no depende del periodo elegido). Los dados de baja solo si se les debe algo.
+            'pagos' => Seller::query()->ordered()->where('is_owner', false)->get()
+                ->map(fn (Seller $s): array => ['seller_id' => $s->id, 'name' => $s->name, 'active' => $s->active] + Arr::except(PagosVendedor::estado($s), ['cortes']))
+                ->filter(fn (array $p): bool => $p['active'] || $p['pendiente'] !== 0)->values()->all(),
         ]);
     }
 }

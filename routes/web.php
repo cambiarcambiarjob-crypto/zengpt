@@ -8,6 +8,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SellerController;
 use App\Http\Controllers\SlotController;
+use App\Http\Controllers\VendedorReporteController;
 use App\Http\Controllers\VisorGoogleController;
 use Illuminate\Support\Facades\Route;
 
@@ -45,6 +46,10 @@ Route::middleware('auth')->group(function () {
     Route::put('/dia/{fecha}/publicidad', [DayController::class, 'publicidad'])->middleware('admin')->name('dia.publicidad');
 
     Route::get('/reportes', ReportController::class)->name('reportes.index');
+    // Cada vendedor: sus métricas y sus pagos (los ven administrador y socio; pagar es del administrador).
+    Route::get('/reportes/vendedores/{seller}', [VendedorReporteController::class, 'show'])->name('reportes.vendedor');
+    Route::post('/reportes/vendedores/{seller}/pagos', [VendedorReporteController::class, 'pagar'])->middleware('admin')->name('reportes.vendedor.pagar');
+    Route::delete('/pagos-vendedores/{pago}', [VendedorReporteController::class, 'deshacer'])->middleware('admin')->name('reportes.vendedor.deshacer');
 
     // Visor del Chrome de cada cuenta (administrador y socio).
     Route::get('/google/visor/{account}', [VisorGoogleController::class, 'show'])->name('google.visor');
