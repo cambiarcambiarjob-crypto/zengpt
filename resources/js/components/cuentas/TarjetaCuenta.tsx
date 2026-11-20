@@ -1,4 +1,4 @@
-import { Link2, Pencil, StickyNote, Trash2 } from 'lucide-react';
+import { CircleCheck, Link2, Pencil, StickyNote, Trash2 } from 'lucide-react';
 import { memo } from 'react';
 import { BarraEspacios } from '@/components/ui/BarraEspacios';
 import { Boton } from '@/components/ui/Boton';
@@ -62,6 +62,15 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                             <Copiable texto={cuenta.email} etiqueta="Gmail de la cuenta" className="py-0.5" />
                         </h2>
                         <Insignia estado={estado} />
+                        {cuenta.llena && (
+                            <span
+                                className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-exito/40 bg-exito/12 px-2 text-[11px] font-semibold tracking-wide whitespace-nowrap text-exito uppercase"
+                                title="Todos los espacios ocupados, pagados y dentro del grupo"
+                            >
+                                <CircleCheck className="size-3" aria-hidden="true" />
+                                Llena
+                            </span>
+                        )}
                         {ligas > 0 && (
                             <span
                                 className={cn(

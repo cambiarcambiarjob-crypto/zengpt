@@ -47,6 +47,21 @@ class Account extends Model
         return $this->expires_on->toDateString() >= Hoy::fecha();
     }
 
+    /**
+     * «Llena»: vigente, con todos sus espacios ocupados, nadie pendiente de pago y todos dentro del grupo familiar
+     * (según la última revisión en Google si la cuenta está conectada; si no, con la invitación aceptada).
+     * Estas cuentas se apartan en la pestaña «Llenas» para que no ocupen lugar entre las que aún requieren algo.
+     */
+    public function estaLlena(bool $conectada): bool
+    {
+        $slots = $this->slots;
+
+        return $this->isActive()
+            && $slots->count() >= self::capacity()
+            && $slots->every(fn (Slot $slot): bool => $slot->paid_on !== null
+                && ($conectada ? $slot->google_status === 'miembro' : $slot->invite_accepted_at !== null));
+    }
+
     public function daysLeft(): int
     {
         return (int) Hoy::carbon()->diffInDays($this->expires_on->copy()->startOfDay(), false);

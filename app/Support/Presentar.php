@@ -13,6 +13,7 @@ final class Presentar
     public static function cuenta(Account $account): array
     {
         $espacios = $account->slots->map(fn (Slot $slot): array => self::espacio($slot))->values()->all();
+        $conectada = GrupoGoogle::conectada($account);
 
         return [
             'id' => $account->id,
@@ -31,9 +32,10 @@ final class Presentar
             'libres' => max(0, Account::capacity() - count($espacios)),
             'ingresos' => (int) $account->slots->whereNotNull('paid_on')->sum('price_cents'),
             'pendientes_pago' => $account->slots->whereNull('paid_on')->count(),
+            'llena' => $account->estaLlena($conectada),
             'espacios' => $espacios,
             'google' => [
-                'conectada' => GrupoGoogle::conectada($account),
+                'conectada' => $conectada,
                 'revisada' => $account->google_synced_at?->toIso8601String(),
                 'extra' => $account->google_extra ?? [],
                 'ligas' => (int) $account->google_ligas,

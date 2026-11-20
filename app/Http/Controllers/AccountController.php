@@ -19,12 +19,12 @@ class AccountController extends Controller
 {
     public function index(Request $request): Response
     {
-        $estado = in_array($request->query('estado'), ['activas', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
+        $estado = in_array($request->query('estado'), ['activas', 'llenas', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
         $q = trim((string) $request->query('q'));
 
         $cuentas = Account::query()
             ->with('slots.seller')
-            ->when($estado === 'activas' || $estado === 'con_espacio', fn ($query) => $query->active())
+            ->when(in_array($estado, ['activas', 'llenas', 'con_espacio'], true), fn ($query) => $query->active())
             ->when($estado === 'vencidas', fn ($query) => $query->expired())
             ->when($estado === 'por_cobrar', fn ($query) => $query->whereHas('slots', fn ($s) => $s->whereNull('paid_on')))
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
@@ -33,11 +33,18 @@ class AccountController extends Controller
             ->orderByDesc('started_on')->orderByDesc('id')
             ->get()
             ->when($estado === 'con_espacio', fn ($c) => $c->filter(fn (Account $a): bool => $a->slots->count() < Account::capacity()))
+            // Las llenas (5 ocupados, todos pagados y dentro del grupo) se apartan de «Activas»; al buscar sí aparecen.
+            ->when($estado === 'activas' && $q === '', fn ($c) => $c->reject(fn (Account $a): bool => $a->estaLlena(GrupoGoogle::conectada($a))))
+            ->when($estado === 'llenas', fn ($c) => $c->filter(fn (Account $a): bool => $a->estaLlena(GrupoGoogle::conectada($a))))
             ->map(fn (Account $a): array => Presentar::cuenta($a))->values()->all();
+
+        $llenas = Account::query()->active()->with('slots')->get()
+            ->filter(fn (Account $a): bool => $a->estaLlena(GrupoGoogle::conectada($a)))->count();
 
         return Inertia::render('Cuentas/Index', [
             'cuentas' => $cuentas,
             'filtros' => ['estado' => $estado, 'q' => $q],
+            'llenas' => $llenas,
             'vendedores' => Seller::query()->where('active', true)->ordered()->get(['id', 'name', 'is_owner']),
         ]);
     }

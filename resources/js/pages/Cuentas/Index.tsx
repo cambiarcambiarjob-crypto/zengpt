@@ -26,6 +26,7 @@ const ESTADOS: { valor: EstadoFiltro; etiqueta: string }[] = [
     { valor: 'activas', etiqueta: 'Activas' },
     { valor: 'con_espacio', etiqueta: 'Con espacio' },
     { valor: 'por_cobrar', etiqueta: 'Por cobrar' },
+    { valor: 'llenas', etiqueta: 'Llenas' },
     { valor: 'vencidas', etiqueta: 'Vencidas' },
     { valor: 'todas', etiqueta: 'Todas' },
 ];
@@ -45,7 +46,7 @@ function recuperarFoco(cuentaId?: number): void {
 }
 
 export default function CuentasIndex() {
-    const { cuentas, filtros, vendedores, negocio, auth } = usePagina<CuentasProps>();
+    const { cuentas, filtros, vendedores, negocio, auth, llenas } = usePagina<CuentasProps>();
     const esAdmin = auth.user?.is_admin === true;
 
     // ── Búsqueda con pausa ────────────────────────────────────────────────────────────────────────────────────────
@@ -210,7 +211,10 @@ export default function CuentasIndex() {
 
     // ── Textos ────────────────────────────────────────────────────────────────────────────────────────────────────
     const qLimpia = q.trim();
-    const opcionesEstado = useMemo(() => ESTADOS.map((opcion) => ({ ...opcion, href: urlCuentas(opcion.valor, qLimpia) })), [qLimpia]);
+    const opcionesEstado = useMemo(
+        () => ESTADOS.map((opcion) => ({ ...opcion, etiqueta: opcion.valor === 'llenas' && llenas > 0 ? `Llenas · ${llenas}` : opcion.etiqueta, href: urlCuentas(opcion.valor, qLimpia) })),
+        [qLimpia, llenas],
+    );
     const busquedaAplicada = useMemo(() => filtros.q.toLowerCase(), [filtros.q]);
 
     const total = cuentas.length;
@@ -226,10 +230,13 @@ export default function CuentasIndex() {
         descripcion = total === 0 ? 'Aún no hay cuentas' : `${plural(total, 'cuenta')} en total · ${textoLibres}`;
     } else if (filtros.estado === 'por_cobrar') {
         descripcion = total === 0 ? 'Nadie pendiente de pago' : `${plural(total, 'cuenta')} con clientes pendientes de pago`;
+    } else if (filtros.estado === 'llenas') {
+        descripcion = total === 0 ? 'Ninguna cuenta llena todavía' : `${plural(total, 'cuenta llena', 'cuentas llenas')}: ${negocio.capacidad} de ${negocio.capacidad}, todos pagados y dentro del grupo`;
     } else if (filtros.estado === 'con_espacio') {
         descripcion = total === 0 ? 'Ninguna cuenta con espacio' : `${plural(total, 'cuenta')} con espacio · ${textoLibres}`;
     } else {
         descripcion = total === 0 ? 'Ninguna cuenta activa' : `${plural(total, 'cuenta activa', 'cuentas activas')} · ${textoLibres}`;
+        if (llenas > 0) descripcion += ` · ${plural(llenas, 'llena', 'llenas')} aparte`;
     }
 
     return (
@@ -303,6 +310,14 @@ export default function CuentasIndex() {
                                 </Boton>
                             </>
                         }
+                    />
+                </Tarjeta>
+            ) : filtros.estado === 'llenas' ? (
+                <Tarjeta className="animate-entrada">
+                    <EstadoVacio
+                        icono={<CircleCheck className="size-5" />}
+                        titulo="Ninguna cuenta llena todavía"
+                        descripcion={`Cuando una cuenta tenga sus ${plural(negocio.capacidad, 'espacio')} ocupados, todos pagados y dentro del grupo, se pasa sola aquí para no ocupar lugar en «Activas».`}
                     />
                 </Tarjeta>
             ) : filtros.estado === 'vencidas' ? (

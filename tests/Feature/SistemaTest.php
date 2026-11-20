@@ -365,6 +365,57 @@ class SistemaTest extends TestCase
         $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $page) => $page->where('cuentas.pendientes_pago', 0));
     }
 
+    public function test_las_cuentas_llenas_sin_pendientes_y_con_todos_en_el_grupo_se_apartan(): void
+    {
+        config(['zengpt.google.cuentas' => ['conectada@gmail.com']]);
+        $jorge = $this->vendedor('Jorge');
+        $llenar = function (Account $cuenta, array $cambios = []) use ($jorge): void {
+            foreach (range(1, Account::capacity()) as $p) {
+                Slot::query()->create(array_merge([
+                    'account_id' => $cuenta->id, 'position' => $p, 'client_email' => "c{$cuenta->id}-{$p}@gmail.com", 'price_cents' => 20000,
+                    'seller_id' => $jorge->id, 'sold_on' => Hoy::fecha(), 'invite_accepted_at' => now(),
+                ], $cambios[$p] ?? []));
+            }
+        };
+
+        // Sin sesión de Google: cuenta «en el grupo» con la invitación aceptada.
+        $llena = $this->cuenta(['email' => 'llena@gmail.com']);
+        $llenar($llena);
+        // Con sesión de Google: manda lo que dijo Google en la última revisión.
+        $conectada = $this->cuenta(['email' => 'conectada@gmail.com']);
+        $llenar($conectada);
+        Slot::query()->where('account_id', $conectada->id)->update(['google_status' => 'miembro']);
+        // No llenas: alguien debe, alguien solo está invitado, un espacio libre, o ya venció.
+        $debe = $this->cuenta(['email' => 'debe@gmail.com']);
+        $llenar($debe, [3 => ['paid_on' => null]]);
+        $invitado = $this->cuenta(['email' => 'conectada.invitado@gmail.com']);
+        config(['zengpt.google.cuentas' => ['conectada@gmail.com', 'conectada.invitado@gmail.com']]);
+        $llenar($invitado);
+        Slot::query()->where('account_id', $invitado->id)->update(['google_status' => 'miembro']);
+        Slot::query()->where('account_id', $invitado->id)->where('position', 5)->update(['google_status' => 'invitado']);
+        $libre = $this->cuenta(['email' => 'libre@gmail.com']);
+        Slot::query()->create(['account_id' => $libre->id, 'position' => 1, 'client_email' => 'uno@gmail.com', 'price_cents' => 20000, 'seller_id' => $jorge->id, 'sold_on' => Hoy::fecha(), 'invite_accepted_at' => now()]);
+        $vencida = $this->cuenta(['email' => 'vencida@gmail.com', 'started_on' => Hoy::carbon()->subMonths(4)->toDateString(), 'expires_on' => Hoy::carbon()->subMonth()->toDateString()]);
+        $llenar($vencida);
+
+        $correos = fn (string $url): array => collect($this->actingAs($this->socio)->get($url)->viewData('page')['props']['cuentas'])->pluck('email')->sort()->values()->all();
+
+        $this->assertSame(['conectada@gmail.com', 'llena@gmail.com'], $correos('/cuentas?estado=llenas'));
+        $this->assertSame(['conectada.invitado@gmail.com', 'debe@gmail.com', 'libre@gmail.com'], $correos('/cuentas'));
+        $this->actingAs($this->socio)->get('/cuentas')->assertInertia(fn (Assert $page) => $page->where('llenas', 2)->where('filtros.estado', 'activas'));
+        // Al buscar en «Activas» también aparecen las llenas; en «Todas» siguen estando, marcadas.
+        $this->assertSame(['llena@gmail.com'], $correos('/cuentas?q=llena@'));
+        $todas = collect($this->actingAs($this->socio)->get('/cuentas?estado=todas')->viewData('page')['props']['cuentas'])->keyBy('email');
+        $this->assertCount(6, $todas);
+        $this->assertTrue($todas['llena@gmail.com']['llena']);
+        $this->assertFalse($todas['debe@gmail.com']['llena']);
+        $this->assertFalse($todas['vencida@gmail.com']['llena']);
+
+        // En cuanto alguien deja de estar al corriente, regresa sola a «Activas».
+        Slot::query()->where('account_id', $llena->id)->where('position', 2)->update(['paid_on' => null]);
+        $this->assertSame(['conectada@gmail.com'], $correos('/cuentas?estado=llenas'));
+    }
+
     public function test_revisar_el_grupo_en_google_marca_a_cada_cliente(): void
     {
         config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com']]);

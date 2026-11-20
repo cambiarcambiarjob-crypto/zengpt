@@ -28,6 +28,8 @@ export interface Cuenta {
     invite_links: { position: number; url: string | null; expires_on: string | null }[]; started_on: string; expires_on: string; dias_restantes: number;
     activa: boolean; por_vencer: boolean; notes: string | null;
     capacidad: number; ocupados: number; libres: number; ingresos: number; pendientes_pago: number; espacios: Espacio[];
+    /** Vigente, los 5 espacios ocupados, nadie pendiente de pago y todos dentro del grupo: va en la pestaña «Llenas». */
+    llena: boolean;
     /** Sincronización con el grupo familiar de Google (solo cuentas con sesión abierta en el servidor). */
     google: { conectada: boolean; revisada: string | null; ligas: number; extra: { email: string; tipo: 'miembro' | 'invitado' }[] };
 }
@@ -53,8 +55,10 @@ export interface DashboardProps {
 
 export interface CuentasProps {
     cuentas: Cuenta[];
-    filtros: { estado: 'activas' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
+    filtros: { estado: 'activas' | 'llenas' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
     vendedores: Vendedor[];
+    /** Cuántas cuentas vigentes están llenas (para la pestaña «Llenas»). */
+    llenas: number;
 }
 
 export interface DiaProps {
