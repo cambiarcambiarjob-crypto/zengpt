@@ -1,15 +1,18 @@
 // Grupo familiar de Google con el Chrome del servidor. CADA cuenta tiene su propio perfil de Chrome (su propia
-// sesión de Google) en ZENBOT_PERFILES/<correo>. El Chrome de una cuenta se abre en la pantalla virtual solo
-// mientras trabaja (o mientras el visor está abierto) y se cierra al terminar; nunca hay dos abiertos a la vez.
+// sesión de Google) en ZENBOT_PERFILES/<correo>. Hay ZENBOT_PANTALLAS pantallas virtuales (Xvfb :101, :102, …, cada
+// una con su VNC «pN» para el visor): el Chrome de una cuenta ocupa una pantalla mientras trabaja o mientras su visor
+// está abierto, así que varias cuentas pueden tener su visor abierto a la vez, cada una en la suya.
 // ZENBOT_ADMIN dice de qué cuenta se trata. Hace UNA acción y siempre responde un JSON.
 //
-//   node familia.cjs abrir           → abre el Chrome de la cuenta para el visor (se queda abierto)
-//   node familia.cjs cerrar          → cierra el Chrome de la cuenta (fin del visor)
+//   node familia.cjs abrir [forzar]  → abre el Chrome de la cuenta para el visor (se queda abierto) → {"ok":true,"sesion":…,"pantalla":N}
+//                                      con «forzar», si todas las pantallas tienen visor abierto, cierra el más viejo
+//   node familia.cjs cerrar          → cierra el Chrome de la cuenta (fin del visor); con ZENBOT_FICHA, solo si es la de
+//                                      la pestaña que lo abrió (al cerrar o recargar una pestaña no se tumba la nueva)
 //   node familia.cjs leer            → {"ok":true,"admin":"…","miembros":[…],"invitaciones":[…],"limite":false}
 //                                       (limite: alguna pestaña abierta, p. ej. la del visor, mostraba el límite de invitaciones)
 //   node familia.cjs invitar CORREO  → {"ok":true,"invitado":"correo"}
 //   node familia.cjs sacar CORREO    → {"ok":true,"sacado":"correo","era":"miembro"|"invitacion"}
-//   errores                          → {"ok":false,"error":"sin_sesion"|"sin_navegador"|"visor_ocupado"|"otra_cuenta"|"no_encontrado"|"sin_lugar"|"no_confirmado"|"limite_invitaciones"|"…"}
+//   errores                          → {"ok":false,"error":"sin_sesion"|"sin_navegador"|"otra_cuenta"|"no_encontrado"|"sin_lugar"|"no_confirmado"|"limite_invitaciones"|"sin_pantalla"|"…"}
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -21,8 +24,12 @@ const PERFILES = process.env.ZENBOT_PERFILES || '/var/lib/zenbot/perfiles';
 const CASA = process.env.ZENBOT_HOME || '/var/lib/zenbot/home';
 const PANTALLA = process.env.ZENBOT_DISPLAY || ':99';
 const PUERTO = Number(process.env.ZENBOT_PUERTO || 9333);
+// Pantallas para los visores: la N usa el DISPLAY :10N y el puerto de depuración PUERTO + N.
+const PANTALLAS = Math.max(1, Number(process.env.ZENBOT_PANTALLAS || 3));
+const displayDe = (n) => `:${100 + n}`;
+const puertoDe = (n) => PUERTO + n;
 const ESTADO = path.join(PERFILES, '.estado.json');
-// Un visor olvidado deja de apartar el Chrome después de este tiempo.
+// Un visor olvidado deja de apartar su pantalla después de este tiempo.
 const VISOR_MINUTOS = 20;
 const BASE = 'https://myaccount.google.com/';
 const CORREO = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
@@ -32,6 +39,8 @@ const LIMITE = /l[ií]mite de invitaciones|reached the limit[^.]{0,40}invit/i;
 // ZENBOT_ADMIN: correo esperado del administrador; si la sesión es de otra cuenta, no se hace nada.
 const ESPERADO = (process.env.ZENBOT_ADMIN || '').trim().toLowerCase();
 const [accion, objetivo] = [process.argv[2], (process.argv[3] || '').trim().toLowerCase()];
+// Ficha de la pestaña del visor que abrió (o pide cerrar) el Chrome de la cuenta.
+const FICHA = (process.env.ZENBOT_FICHA || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 64);
 
 // Para cuando Google pide «verifica que eres tú» (p. ej. al quitar a un miembro): la contraseña de la cuenta y la
 // clave de su 2FA llegan por variables de entorno desde el sistema (nunca por la línea de comandos).
@@ -98,52 +107,78 @@ async function verificarIdentidad(pagina) {
 
 const perfilDe = (correo) => path.join(PERFILES, correo.replace(/[^a-z0-9@._-]/g, '_'));
 const vivo = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-const leerEstado = () => { try { return JSON.parse(fs.readFileSync(ESTADO, 'utf8')); } catch { return null; } };
-const guardarEstado = (e) => (e ? fs.writeFileSync(ESTADO, JSON.stringify(e)) : fs.rmSync(ESTADO, { force: true }));
-const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Cierra el Chrome abierto (deja que guarde la sesión: SIGTERM y, si no responde, SIGKILL). */
-async function cerrarChrome(estado) {
-    if (estado && vivo(estado.pid)) {
-        try { process.kill(-estado.pid, 'SIGTERM'); } catch { try { process.kill(estado.pid, 'SIGTERM'); } catch {} }
-        for (let i = 0; i < 40 && vivo(estado.pid); i++) await dormir(200);
-        if (vivo(estado.pid)) { try { process.kill(-estado.pid, 'SIGKILL'); } catch { try { process.kill(estado.pid, 'SIGKILL'); } catch {} } }
+/** Pantallas ocupadas: {N: {correo, pid, visor, desde}}. Las que ya no tienen su Chrome vivo se descartan. */
+function leerEstado() {
+    let e = null;
+    try { e = JSON.parse(fs.readFileSync(ESTADO, 'utf8')); } catch {}
+    const pantallas = (e && e.pantallas) || {};
+    for (const n of Object.keys(pantallas)) if (!pantallas[n] || !vivo(pantallas[n].pid)) delete pantallas[n];
+    return pantallas;
+}
+const guardarEstado = (pantallas) => fs.writeFileSync(ESTADO, JSON.stringify({ pantallas }));
+const pantallaDe = (pantallas, correo) => Object.keys(pantallas).map(Number).find((n) => pantallas[n].correo === correo);
+// Un visor olvidado deja de apartar su pantalla después de VISOR_MINUTOS.
+const apartada = (p) => p.visor && Date.now() - p.desde < VISOR_MINUTOS * 60000;
+
+/** Cierra un Chrome (deja que guarde la sesión: SIGTERM y, si no responde, SIGKILL). */
+async function cerrarChrome(p) {
+    if (p && vivo(p.pid)) {
+        try { process.kill(-p.pid, 'SIGTERM'); } catch { try { process.kill(p.pid, 'SIGTERM'); } catch {} }
+        for (let i = 0; i < 40 && vivo(p.pid); i++) await dormir(200);
+        if (vivo(p.pid)) { try { process.kill(-p.pid, 'SIGKILL'); } catch { try { process.kill(p.pid, 'SIGKILL'); } catch {} } }
     }
-    guardarEstado(null);
+}
+
+/** Cierra el Chrome de `correo` (si tiene pantalla) y la deja libre. Con `ficha`, solo si es la del visor que la abrió. */
+async function cerrarDe(correo, ficha = '') {
+    const pantallas = leerEstado();
+    const n = pantallaDe(pantallas, correo);
+    if (n === undefined) return;
+    if (ficha && pantallas[n].ficha && pantallas[n].ficha !== ficha) return;
+    await cerrarChrome(pantallas[n]);
+    delete pantallas[n];
+    guardarEstado(pantallas);
 }
 
 /**
- * Deja abierto el Chrome de `correo` y se conecta a él. Si está abierto el de otra cuenta, lo cierra antes (salvo que
- * su visor esté en uso). Con `visor`, el Chrome queda apartado para la pantalla del visor.
+ * Deja abierto el Chrome de `correo` en su pantalla y se conecta a él. Si no tenía, toma una libre; si no hay, reutiliza
+ * la más vieja sin visor en uso (y con `forzar`, también una con visor). Con `visor`, la pantalla queda apartada.
  */
-async function chromeDe(correo, visor = false) {
-    let estado = leerEstado();
-    if (estado && !vivo(estado.pid)) { guardarEstado(null); estado = null; }
+async function chromeDe(correo, visor = false, forzar = false) {
+    const pantallas = leerEstado();
+    let n = pantallaDe(pantallas, correo);
 
-    if (estado && estado.correo !== correo) {
-        if (estado.visor && Date.now() - estado.desde < VISOR_MINUTOS * 60000) throw falla('visor_ocupado');
-        await cerrarChrome(estado);
-        estado = null;
+    if (n === undefined) {
+        for (let k = 1; k <= PANTALLAS && n === undefined; k++) if (!pantallas[k]) n = k;
+    }
+    if (n === undefined) {
+        const candidatas = Object.keys(pantallas).map(Number).filter((k) => k <= PANTALLAS && (forzar || !apartada(pantallas[k])));
+        candidatas.sort((a, b) => pantallas[a].desde - pantallas[b].desde);
+        if (candidatas.length === 0) throw Object.assign(falla('sin_pantalla'), { ocupadas: Object.values(pantallas).map((p) => p.correo) });
+        n = candidatas[0];
+        await cerrarChrome(pantallas[n]);
+        delete pantallas[n];
     }
 
-    if (!estado) {
+    if (!pantallas[n]) {
         const perfil = perfilDe(correo);
         fs.mkdirSync(perfil, { recursive: true });
         fs.mkdirSync(CASA, { recursive: true });
         const hijo = spawn(CHROME, [
             `--user-data-dir=${perfil}`, '--no-first-run', '--no-default-browser-check', '--lang=es-MX',
-            '--window-position=0,0', '--window-size=1366,860',
-            '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${PUERTO}`, 'about:blank',
-        ], { detached: true, stdio: 'ignore', env: { ...process.env, DISPLAY: PANTALLA, HOME: CASA, ZENBOT_PASS: '', ZENBOT_TOTP: '' } });
+            '--window-position=0,0', '--window-size=1366,860', '--renderer-process-limit=2',
+            '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${puertoDe(n)}`, 'about:blank',
+        ], { detached: true, stdio: 'ignore', env: { ...process.env, DISPLAY: displayDe(n), HOME: CASA, ZENBOT_PASS: '', ZENBOT_TOTP: '' } });
         hijo.unref();
-        estado = { correo, pid: hijo.pid, visor: false, desde: Date.now() };
+        pantallas[n] = { correo, pid: hijo.pid, visor: false, desde: Date.now() };
     }
 
-    if (visor) { estado.visor = true; estado.desde = Date.now(); }
-    guardarEstado(estado);
+    if (visor) Object.assign(pantallas[n], { visor: true, desde: Date.now(), ficha: FICHA || null });
+    guardarEstado(pantallas);
 
     for (let i = 0; i < 50; i++) {
-        try { return { navegador: await chromium.connectOverCDP(`http://127.0.0.1:${PUERTO}`, { timeout: 3000 }), estado }; } catch { await dormir(300); }
+        try { return { navegador: await chromium.connectOverCDP(`http://127.0.0.1:${puertoDe(n)}`, { timeout: 3000 }), pantalla: n, visor: pantallas[n].visor }; } catch { await dormir(300); }
     }
     throw falla('sin_navegador');
 }
@@ -274,21 +309,21 @@ async function sacar(pagina, correo) {
     if (!CORREO.test(ESPERADO)) return salir({ ok: false, error: 'sin_cuenta' }, 2);
 
     if (accion === 'cerrar') {
-        const estado = leerEstado();
-        if (estado && estado.correo === ESPERADO) await cerrarChrome(estado);
+        await cerrarDe(ESPERADO, FICHA);
         return salir({ ok: true });
     }
 
     let navegador;
-    let estado;
+    let pantalla;
+    let enVisor;
     try {
-        ({ navegador, estado } = await chromeDe(ESPERADO, accion === 'abrir'));
+        ({ navegador, pantalla, visor: enVisor } = await chromeDe(ESPERADO, accion === 'abrir', accion === 'abrir' && objetivo === 'forzar'));
     } catch (e) {
-        return salir({ ok: false, error: e.codigo || 'sin_navegador' }, 1);
+        return salir({ ok: false, error: e.codigo || 'sin_navegador', ocupadas: e.ocupadas || null }, 1);
     }
     conexion = navegador;
     // Si nadie tiene abierto el visor de esta cuenta, el Chrome se cierra al terminar.
-    if (!estado.visor) alSalir = () => cerrarChrome(leerEstado());
+    if (!enVisor) alSalir = () => cerrarDe(ESPERADO);
 
     const contexto = navegador.contexts()[0];
     // Lo que ya estaba en pantalla (el visor): ¿Google mostraba el límite de invitaciones?
@@ -307,7 +342,7 @@ async function sacar(pagina, correo) {
             await pagina.bringToFront();
             pestana = null;
             const dentro = pagina.url().startsWith(BASE);
-            return await salir({ ok: true, sesion: dentro });
+            return await salir({ ok: true, sesion: dentro, pantalla });
         }
         if (accion === 'leer') {
             const grupo = await leer(pagina);
@@ -322,7 +357,8 @@ async function sacar(pagina, correo) {
         // Si Google pide algo que debe hacer una persona, el Chrome se queda abierto en esa pantalla para el visor.
         if (['requiere_persona', 'verificacion_distinta', 'verificacion_atorada', 'verificacion_rechazada'].includes(e.codigo)) {
             const actual = leerEstado();
-            if (actual && actual.correo === ESPERADO) guardarEstado({ ...actual, visor: true, desde: Date.now() });
+            const n = pantallaDe(actual, ESPERADO);
+            if (n !== undefined) { Object.assign(actual[n], { visor: true, desde: Date.now() }); guardarEstado(actual); }
             alSalir = null;
             await pagina.bringToFront().catch(() => {});
             pestana = null;

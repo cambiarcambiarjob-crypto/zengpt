@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\VisorOcupado;
 use App\Models\Account;
 use App\Services\GrupoGoogle;
 use App\Support\Totp;
@@ -40,28 +41,40 @@ class VisorGoogleController extends Controller
         return response()->json(['codigo' => $secreto !== '' ? Totp::codigo($secreto) : null, 'restante' => Totp::restante()])->header('Cache-Control', 'no-store');
     }
 
-    /** Abre el Chrome de ESTA cuenta en la pantalla del visor (cada cuenta tiene el suyo, con su propia sesión). */
-    public function login(Account $account, GrupoGoogle $grupo): JsonResponse
+    /**
+     * Abre el Chrome de ESTA cuenta en su propia pantalla del visor (varias cuentas pueden tener su visor abierto a la
+     * vez). `ficha` identifica la pestaña; `forzar` cierra el visor más viejo si todas las pantallas están en uso.
+     */
+    public function login(Request $request, Account $account, GrupoGoogle $grupo): JsonResponse
     {
+        $datos = $request->validate(['ficha' => ['nullable', 'string', 'regex:/^[A-Za-z0-9-]{8,64}$/'], 'forzar' => ['nullable', 'boolean']]);
+
         try {
-            $sesion = $grupo->abrirVisor($account);
+            $abierto = $grupo->abrirVisor($account, (bool) ($datos['forzar'] ?? false), $datos['ficha'] ?? null);
+        } catch (VisorOcupado $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage(), 'ocupadas' => $e->ocupadas], 409);
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }
 
-        return response()->json(['ok' => true, 'sesion' => $sesion]);
+        return response()->json(['ok' => true] + $abierto);
     }
 
-    /** Cierra el Chrome de la cuenta sin revisar nada. */
-    public function cerrar(Account $account, GrupoGoogle $grupo): RedirectResponse
+    /**
+     * Cierra el Chrome de la cuenta sin revisar nada. La pestaña del visor lo pide sola al cerrarse (con su `ficha`, para
+     * no cerrar uno que otra pestaña acaba de abrir): a esa se le contesta 204 sin redirigir.
+     */
+    public function cerrar(Request $request, Account $account, GrupoGoogle $grupo): RedirectResponse|Response
     {
+        $ficha = $request->validate(['ficha' => ['nullable', 'string', 'regex:/^[A-Za-z0-9-]{8,64}$/']])['ficha'] ?? null;
+
         try {
-            $grupo->cerrarVisor($account);
+            $grupo->cerrarVisor($account, $ficha);
         } catch (RuntimeException) {
             // Si ya estaba cerrado no pasa nada.
         }
 
-        return redirect('/cuentas');
+        return $ficha !== null ? response()->noContent() : redirect('/cuentas');
     }
 
     /** «Ya inicié sesión»: revisa el grupo para confirmar que la sesión quedó bien. */

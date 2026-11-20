@@ -745,6 +745,41 @@ class SistemaTest extends TestCase
         $this->assertFalse($otra->fresh()->google_conectada);
     }
 
+    public function test_cada_cuenta_abre_su_visor_en_su_propia_pantalla_y_se_cierra_con_la_pestana(): void
+    {
+        $cuenta = $this->cuenta(['email' => 'jacob@gmail.com']);
+        $ficha = 'a1b2c3d4-e5f6-4711-8899-aabbccddeeff';
+
+        // Abre en su propia pantalla (pN) con la ficha de la pestaña.
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'sesion' => false, 'pantalla' => 2]))]);
+        $this->actingAs($this->socio)->postJson("/google/visor/{$cuenta->id}/login", ['ficha' => $ficha])->assertOk()->assertExactJson(['ok' => true, 'sesion' => false, 'pantalla' => 2]);
+        Process::assertRan(fn ($p) => (array) $p->command === ['node', '/opt/zenbot/familia.cjs', 'abrir'] && ($p->environment['ZENBOT_FICHA'] ?? null) === $ficha && ($p->environment['ZENBOT_PANTALLAS'] ?? null) === '3');
+        $this->actingAs($this->socio)->postJson("/google/visor/{$cuenta->id}/login", ['ficha' => 'no válida!'])->assertUnprocessable();
+
+        // Todas las pantallas en uso: dice con qué cuentas; «forzar» cierra el visor más viejo.
+        Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'sin_pantalla', 'ocupadas' => ['uno@gmail.com', 'dos@gmail.com', 'tres@gmail.com']]), exitCode: 1)]);
+        $this->actingAs($this->socio)->postJson("/google/visor/{$cuenta->id}/login", ['ficha' => $ficha])->assertStatus(409)
+            ->assertJson(['ok' => false, 'ocupadas' => ['uno@gmail.com', 'dos@gmail.com', 'tres@gmail.com']])
+            ->assertJsonPath('mensaje', 'Las 3 pantallas del visor están en uso (uno@gmail.com, dos@gmail.com, tres@gmail.com): cierra alguno de esos visores y vuelve a intentar.');
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'sesion' => true, 'pantalla' => 1]))]);
+        $this->actingAs($this->socio)->postJson("/google/visor/{$cuenta->id}/login", ['ficha' => $ficha, 'forzar' => true])->assertOk()->assertJsonPath('pantalla', 1);
+        Process::assertRan(fn ($p) => array_slice((array) $p->command, -2) === ['abrir', 'forzar']);
+
+        // Al cerrar la pestaña, el visor pide cerrar su Chrome con su ficha (sin redirigir); el botón «Cerrar visor» redirige.
+        Process::fake(['*' => Process::result(json_encode(['ok' => true]))]);
+        $this->actingAs($this->socio)->post("/google/visor/{$cuenta->id}/cerrar", ['ficha' => $ficha])->assertNoContent();
+        Process::assertRan(fn ($p) => in_array('cerrar', (array) $p->command, true) && ($p->environment['ZENBOT_FICHA'] ?? null) === $ficha);
+        $this->actingAs($this->socio)->post("/google/visor/{$cuenta->id}/cerrar")->assertRedirect('/cuentas');
+
+        // Revisar el grupo cuando todas las pantallas están en uso: aviso claro, sin tronar.
+        config(['zengpt.google.cuentas' => ['jacob@gmail.com']]);
+        Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'sin_pantalla', 'ocupadas' => ['uno@gmail.com']]), exitCode: 1)]);
+        $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/google")->assertSessionHas('error', fn (string $m): bool => str_contains($m, 'uno@gmail.com'));
+
+        // La página del visor solo deja pegar cuando la pantalla ya es de esta cuenta.
+        $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertOk()->assertSee('Cerrar el visor más viejo y abrir esta cuenta')->assertSee('sendBeacon', false);
+    }
+
     public function test_las_invitaciones_al_correo_de_ligas_son_ligas_por_mandar_y_no_clientes(): void
     {
         config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com'], 'zengpt.google.correos_ligas' => ['ligas.dueno@gmail.com']]);

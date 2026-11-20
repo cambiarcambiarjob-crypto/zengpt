@@ -25,7 +25,14 @@
         .estado.mal .punto { background: var(--peligro); }
         .espacio { flex: 1; }
         main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 320px; min-height: 0; }
-        #pantalla { background: #000; min-height: 0; overflow: hidden; }
+        #pantalla { background: #000; min-height: 0; overflow: hidden; position: relative; }
+        #espera { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--suave); font-size: 14px; line-height: 1.5; }
+        #ocupadas { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,.85); z-index: 2; }
+        #ocupadas.si { display: flex; }
+        #ocupadas div { max-width: 460px; border: 1px solid rgba(229,83,75,.4); background: var(--superficie); border-radius: 8px; padding: 18px; display: grid; gap: 12px; font-size: 13px; color: var(--suave); line-height: 1.5; }
+        #ocupadas b { color: var(--texto); }
+        #ocupadas ul { margin: 0; padding-left: 18px; color: var(--texto); }
+        [data-pegar]:disabled, #listo:disabled { opacity: .45; cursor: not-allowed; }
         aside { border-left: 1px solid var(--borde); background: var(--superficie); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
         .paso { color: var(--suave); font-size: 13px; margin: 0; }
         .paso b { color: var(--texto); font-weight: 600; }
@@ -69,10 +76,20 @@
     </header>
 
     <main>
-        <div id="pantalla" aria-label="Pantalla del Chrome del servidor"></div>
+        <div id="pantalla" aria-label="Pantalla del Chrome del servidor">
+            <p id="espera">Abriendo el Chrome de esta cuenta en su propia pantalla…</p>
+            <div id="ocupadas" role="alert">
+                <div>
+                    <p><b>Todas las pantallas del visor están en uso.</b> Cada cuenta abre el suyo; ahorita los tienen:</p>
+                    <ul id="ocupadas-lista"></ul>
+                    <p>Ciérralos desde su pestaña (al cerrar la pestaña se libera solo) o cierra el más viejo para abrir esta cuenta.</p>
+                    <button type="button" id="forzar" class="primario">Cerrar el visor más viejo y abrir esta cuenta</button>
+                </div>
+            </div>
+        </div>
 
         <aside>
-            <p class="paso"><b>1.</b> La pantalla es el Chrome de <b>esta cuenta</b> (cada cuenta tiene el suyo). Si Google pide iniciar sesión, sigue los pasos.</p>
+            <p class="paso"><b>1.</b> La pantalla es el Chrome de <b>esta cuenta</b>, en su propia pantalla (cada cuenta tiene la suya y se cierra sola al cerrar esta pestaña). Si Google pide iniciar sesión, sigue los pasos.</p>
             <p class="paso"><b>2.</b> Da clic en el campo de la pantalla y pica <b>Pegar en el visor</b>: lo escribe por ti.</p>
 
             <div class="dato">
@@ -113,7 +130,7 @@
             <p class="paso"><b>3.</b> Cuando ya veas tu grupo familiar en la pantalla:</p>
             <form method="POST" action="/google/visor/{{ $cuenta->id }}/listo">
                 @csrf
-                <button type="submit" class="primario" style="width:100%">Ya inicié sesión · revisar grupo</button>
+                <button type="submit" id="listo" class="primario" style="width:100%" disabled>Ya inicié sesión · revisar grupo</button>
             </form>
             @if (session('error'))
                 <div class="aviso mal">{{ session('error') }}</div>
@@ -157,17 +174,34 @@
         const avisar = (texto, bien = true) => { aviso.textContent = texto; aviso.className = 'aviso ' + (bien ? 'ok' : 'mal'); clearTimeout(avisar.t); avisar.t = setTimeout(() => (aviso.className = 'aviso'), 3500); };
         const estado = (texto, clase) => { document.getElementById('estado-texto').textContent = texto; document.getElementById('estado').className = 'estado ' + (clase || ''); };
 
-        // Pantalla del Chrome del servidor (solo pasa si nginx confirma que eres el administrador).
-        const rfb = new RFB(document.getElementById('pantalla'), `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/zenbot-visor/websockify`);
-        rfb.scaleViewport = true;
-        rfb.focusOnClick = true;
-        rfb.addEventListener('connect', () => {});
-        rfb.addEventListener('disconnect', () => estado('Desconectado: recarga la página', 'mal'));
+        // Ficha de esta pestaña: al cerrarla se cierra el Chrome de la cuenta, salvo que otra pestaña lo haya vuelto a abrir.
+        const ficha = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+        // La pantalla se conecta cuando el Chrome de ESTA cuenta ya está abierto, en su propia pantalla (pN). Hasta entonces
+        // «Pegar en el visor» y «Ya inicié sesión» no hacen nada: nunca se teclea en el Chrome de otra cuenta.
+        const caja = document.getElementById('pantalla');
+        let rfb = null;
+        let pantalla = null;
+        let propio = false;
+        const permitir = (si) => {
+            propio = si;
+            document.querySelectorAll('[data-pegar], #listo').forEach((b) => (b.disabled = !si));
+        };
+        const conectar = (n) => {
+            if (rfb && pantalla === n) return;
+            if (rfb) { try { rfb.disconnect(); } catch {} }
+            pantalla = n;
+            document.getElementById('espera').style.display = 'none';
+            rfb = new RFB(caja, `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/zenbot-visor/websockify?token=p${n}`);
+            rfb.scaleViewport = true;
+            rfb.focusOnClick = true;
+            rfb.addEventListener('disconnect', () => { if (pantalla === n) { estado('Desconectado: recarga la página', 'mal'); permitir(false); } });
+        };
 
         // Pegar en el visor: teclea el dato, letra por letra, en el campo que tenga el foco en la pantalla.
         const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
         let tecleando = false;
         const pegar = async (clave) => {
+            if (!propio || !rfb) return avisar('La pantalla todavía no es de esta cuenta: espera a que abra.', false);
             const texto = datos[clave];
             if (!texto) return avisar('No hay dato para pegar.', false);
             if (tecleando) return;
@@ -198,7 +232,7 @@
         });
 
         // Código de 2 pasos: se pide al servidor y se renueva solo cada 30 s.
-        const caja = document.getElementById('codigo');
+        const cajaCodigo = document.getElementById('codigo');
         const barra = document.getElementById('barra');
         let restante = 0;
         const traerCodigo = async () => {
@@ -207,10 +241,10 @@
                 const j = await r.json();
                 datos.codigo = j.codigo;
                 restante = j.restante;
-                if (caja) caja.textContent = j.codigo ?? '------';
-            } catch { if (caja) caja.textContent = 'error'; }
+                if (cajaCodigo) cajaCodigo.textContent = j.codigo ?? '------';
+            } catch { if (cajaCodigo) cajaCodigo.textContent = 'error'; }
         };
-        if (caja) {
+        if (cajaCodigo) {
             await traerCodigo();
             setInterval(async () => {
                 restante -= 1;
@@ -219,26 +253,53 @@
             }, 1000);
         }
 
-        // Abre el Chrome de ESTA cuenta en la pantalla (al entrar y con el botón de recargar).
+        // Abre el Chrome de ESTA cuenta en su pantalla (al entrar y con el botón de recargar).
         const boton = document.getElementById('ir-login');
-        const abrirChrome = async () => {
+        const ocupadas = document.getElementById('ocupadas');
+        const abrirChrome = async (forzar = false) => {
             boton.disabled = true;
+            ocupadas.classList.remove('si');
             estado('Abriendo el Chrome de esta cuenta…');
             try {
-                const r = await fetch(location.pathname + '/login', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' } });
+                const cuerpo = new FormData();
+                cuerpo.append('ficha', ficha);
+                if (forzar) cuerpo.append('forzar', '1');
+                const r = await fetch(location.pathname + '/login', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' }, body: cuerpo });
                 const j = await r.json();
                 if (j.ok) {
-                    estado(j.sesion ? 'Sesión de Google iniciada' : 'Inicia sesión en la pantalla', 'ok');
+                    conectar(j.pantalla);
+                    permitir(true);
+                    estado(`${j.sesion ? 'Sesión de Google iniciada' : 'Inicia sesión en la pantalla'} · pantalla ${j.pantalla}`, 'ok');
                     avisar(j.sesion ? 'Esta cuenta ya tiene su sesión: pica «Ya inicié sesión» para revisar el grupo.' : 'Google pide iniciar sesión: usa los datos de la derecha.');
                 } else {
+                    permitir(false);
                     estado('No se pudo abrir', 'mal');
-                    avisar(j.mensaje, false);
+                    if (j.ocupadas) {
+                        const lista = document.getElementById('ocupadas-lista');
+                        lista.replaceChildren(...j.ocupadas.map((c) => Object.assign(document.createElement('li'), { textContent: c })));
+                        ocupadas.classList.add('si');
+                    } else {
+                        avisar(j.mensaje || 'No se pudo abrir el Chrome de la cuenta.', false);
+                    }
                 }
-            } catch { estado('No se pudo abrir', 'mal'); avisar('No se pudo abrir el Chrome de la cuenta.', false); }
+            } catch { permitir(false); estado('No se pudo abrir', 'mal'); avisar('No se pudo abrir el Chrome de la cuenta.', false); }
             boton.disabled = false;
         };
-        boton.addEventListener('click', abrirChrome);
+        boton.addEventListener('click', () => abrirChrome());
+        document.getElementById('forzar').addEventListener('click', () => {
+            if (confirm('Se cierra el visor que lleva más tiempo abierto (si alguien lo está usando, se le corta). ¿Continuar?')) abrirChrome(true);
+        });
+        permitir(false);
         abrirChrome();
+
+        // Al cerrar (o dejar) esta pestaña, se cierra el Chrome de la cuenta y su pantalla queda libre.
+        window.addEventListener('pagehide', () => {
+            if (!propio) return;
+            const cuerpo = new FormData();
+            cuerpo.append('_token', csrf);
+            cuerpo.append('ficha', ficha);
+            navigator.sendBeacon(location.pathname + '/cerrar', cuerpo);
+        });
     </script>
 </body>
 </html>

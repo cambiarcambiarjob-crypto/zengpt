@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\VisorOcupado;
 use App\Models\Account;
 use App\Models\Slot;
 use App\Support\Hoy;
@@ -73,18 +74,23 @@ class GrupoGoogle
     }
 
     /**
-     * Abre el Chrome de la cuenta para el visor (en su grupo familiar o, si no hay sesión, en el inicio de sesión).
-     * Devuelve si ya tenía la sesión iniciada.
+     * Abre el Chrome de la cuenta para el visor, en su propia pantalla (en su grupo familiar o, si no hay sesión, en el
+     * inicio de sesión). `ficha` identifica la pestaña del visor; con `forzar`, si todas las pantallas tienen un visor
+     * abierto, se cierra el más viejo. Devuelve si ya tenía la sesión iniciada y en qué pantalla quedó.
+     *
+     * @return array{sesion: bool, pantalla: int}
      */
-    public function abrirVisor(Account $account): bool
+    public function abrirVisor(Account $account, bool $forzar = false, ?string $ficha = null): array
     {
-        return (bool) ($this->ejecutar($account, ['abrir'], 60, requiereConexion: false)['sesion'] ?? false);
+        $datos = $this->ejecutar($account, $forzar ? ['abrir', 'forzar'] : ['abrir'], 60, requiereConexion: false, entorno: ['ZENBOT_FICHA' => (string) $ficha]);
+
+        return ['sesion' => (bool) ($datos['sesion'] ?? false), 'pantalla' => (int) ($datos['pantalla'] ?? 1)];
     }
 
-    /** Cierra el Chrome de la cuenta (fin del visor). */
-    public function cerrarVisor(Account $account): void
+    /** Cierra el Chrome de la cuenta (fin del visor). Con `ficha`, solo si sigue siendo el de esa pestaña. */
+    public function cerrarVisor(Account $account, ?string $ficha = null): void
     {
-        $this->ejecutar($account, ['cerrar'], 30, requiereConexion: false);
+        $this->ejecutar($account, ['cerrar'], 30, requiereConexion: false, entorno: ['ZENBOT_FICHA' => (string) $ficha]);
     }
 
     /**
@@ -225,7 +231,7 @@ class GrupoGoogle
      * @param  list<string>  $argumentos
      * @return array<string, mixed>
      */
-    private function ejecutar(Account $account, array $argumentos, int $segundos, bool $requiereConexion = true): array
+    private function ejecutar(Account $account, array $argumentos, int $segundos, bool $requiereConexion = true, array $entorno = []): array
     {
         if ($requiereConexion && ! self::conectada($account)) {
             throw new RuntimeException('Esta cuenta aún no tiene su sesión de Google en el servidor: conéctala con «Conectar con Google (visor)».');
@@ -245,7 +251,8 @@ class GrupoGoogle
                     // Por si Google pide «verifica que eres tú»: contraseña y clave 2FA de la cuenta (solo en el entorno del proceso).
                     'ZENBOT_PASS' => (string) $account->password,
                     'ZENBOT_TOTP' => self::secreto2fa($account->twofa_url),
-                ])
+                    'ZENBOT_PANTALLAS' => (string) config('zengpt.google.pantallas', 3),
+                ] + $entorno)
                 ->run([(string) config('zengpt.google.node', 'node'), (string) config('zengpt.google.script'), ...$argumentos]);
         } finally {
             $lock->release();
@@ -261,6 +268,11 @@ class GrupoGoogle
                 Log::info("zenbot {$account->email}: {$datos['error']} en {$datos['detalle']}");
             }
 
+            // Cada visor abierto ocupa una pantalla; si están todas en uso, se dice con qué cuentas.
+            if (($datos['error'] ?? '') === 'sin_pantalla') {
+                throw new VisorOcupado(array_values(array_filter((array) ($datos['ocupadas'] ?? []), 'is_string')));
+            }
+
             // «Has alcanzado el límite de invitaciones al grupo familiar»: se marca el bloqueo (sus espacios libres
             // salen en rojo con la cuenta regresiva) y se avisa hasta cuándo.
             if (($datos['error'] ?? '') === 'limite_invitaciones') {
@@ -272,7 +284,6 @@ class GrupoGoogle
             throw new RuntimeException(code: ($datos['error'] ?? '') === 'no_encontrado' ? self::NO_ENCONTRADO : 0, message: match ($datos['error'] ?? '') {
                 'sin_sesion' => 'Google cerró la sesión del servidor: entra con «Abrir visor» en la cuenta.',
                 'sin_navegador' => 'El Chrome del servidor no arrancó. Intenta de nuevo en un momento.',
-                'visor_ocupado' => 'El visor está abierto con otra cuenta: ciérralo (o espera unos minutos) y vuelve a intentar.',
                 'otra_cuenta' => 'La sesión del servidor es de otra cuenta: no se hizo nada.',
                 'no_encontrado' => 'Ese cliente no está en el grupo de Google (ni con invitación pendiente).',
                 'sin_lugar' => 'El grupo de Google ya no tiene lugares para invitar.',
