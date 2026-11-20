@@ -77,8 +77,8 @@ class AccountController extends Controller
     }
 
     /**
-     * «Generar liga»: en segundo plano (tarda unos segundos), Google manda UNA invitación del grupo familiar al correo de
-     * ligas; luego se pega esa liga en la cuenta como siempre y se genera la siguiente. La tarjeta muestra el resultado.
+     * «Generar ligas»: en segundo plano, Google manda una invitación por lugar libre al buzón de ligas del servidor y cada
+     * liga se pone sola en su espacio al llegar el correo (zenbot:correo-liga). La tarjeta muestra el avance.
      */
     public function generarLigas(Account $account): RedirectResponse
     {
@@ -87,13 +87,13 @@ class AccountController extends Controller
         }
 
         if ((GrupoGoogle::estadoLigas($account)['estado'] ?? null) === 'generando') {
-            return back()->with('error', 'Ya se está mandando una liga de esta cuenta: espera a que termine.');
+            return back()->with('error', 'Ya se están mandando las ligas de esta cuenta: espera a que termine.');
         }
 
-        GrupoGoogle::guardarEstadoLigas($account, ['estado' => 'generando', 'enviadas' => 0, 'total' => null, 'mensaje' => null]);
+        GrupoGoogle::guardarEstadoLigas($account, ['estado' => 'generando', 'enviadas' => 0, 'total' => null, 'recibidas' => 0, 'mensaje' => null, 'desde' => now()->getTimestamp()]);
         Process::path(base_path())->run(sprintf('setsid nohup %s artisan zenbot:generar-ligas %d > /dev/null 2>&1 &', escapeshellarg((string) config('zengpt.google.php')), $account->id));
 
-        return back()->with('success', 'Mandando la liga: Google te manda una invitación a tu correo de ligas (tarda unos segundos).');
+        return back()->with('success', 'Generando las ligas: Google manda una invitación por lugar libre al buzón y cada liga se pone sola en su espacio.');
     }
 
     /** Activa una cuenta que estaba «por activar»: su vigencia corre desde la fecha de inicio elegida (hoy por omisión). */

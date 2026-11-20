@@ -34,6 +34,11 @@ return [
         'correos_ligas' => explode(',', (string) env('ZENBOT_CORREOS_LIGAS', '')),
         // Segundos que una acción espera su turno si el Chrome está ocupado con otra cuenta.
         'espera' => 15,
+        // Buzón de ligas: las invitaciones de «Generar ligas» van a liga-<cuenta>-<clave>@ este dominio (el servidor recibe
+        // el correo y pone cada liga en su espacio). Vacío = se manda una invitación al correo de ligas, como antes.
+        'buzon_ligas' => env('ZENBOT_BUZON_LIGAS', 'zengpt.codezen.online'),
+        // Copias privadas de los correos que llegan al buzón (se borran a los 7 días).
+        'correos' => env('ZENBOT_CORREOS', '/var/lib/zenbot/correos'),
         // Carpeta de los perfiles de Chrome del lector (ahí deja también el avance de «sacar a todos»).
         'perfiles' => env('ZENBOT_PERFILES', '/var/lib/zenbot/perfiles'),
         // PHP de línea de comandos para las tareas en segundo plano (p. ej. «Generar ligas»).

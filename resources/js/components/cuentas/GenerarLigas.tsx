@@ -8,22 +8,23 @@ import type { Cuenta } from '@/types';
 const CADA = 5000; // mientras se generan, la tarjeta se actualiza cada 5 s
 
 /**
- * «Generar liga»: una a la vez. Google manda, desde el grupo familiar de la cuenta, una invitación a tu correo de ligas
- * (tal cual). Luego pegas la liga en «Editar cuenta», como siempre, y cuando se use generas la siguiente.
+ * «Generar ligas»: Google manda, desde el grupo familiar de la cuenta, una invitación por cada lugar libre al buzón de
+ * ligas del servidor; cada liga se pone sola en su espacio en cuanto llega el correo (no hay que copiar ni pegar).
  * Necesita la sesión de Google de la cuenta en el servidor (se conecta una vez con el visor).
  */
 export function GenerarLigas({ cuenta }: { cuenta: Cuenta }) {
     const [pidiendo, setPidiendo] = useState(false);
     const progreso = cuenta.google.generando_ligas;
     const generando = progreso?.estado === 'generando';
+    const esperando = progreso?.estado === 'esperando';
 
-    // Mientras se generan, se vuelve a pedir la lista de cuentas para ver el avance.
+    // Mientras se mandan o llegan los correos, se vuelve a pedir la lista de cuentas para ver el avance.
     useEffect(() => {
-        if (!generando) return;
+        if (!generando && !esperando) return;
         const id = window.setInterval(() => router.reload({ only: ['cuentas'] }), CADA);
 
         return () => window.clearInterval(id);
-    }, [generando]);
+    }, [generando, esperando]);
 
     const generar = () =>
         router.post(`/cuentas/${cuenta.id}/ligas`, {}, { preserveScroll: true, preserveState: true, onStart: () => setPidiendo(true), onFinish: () => setPidiendo(false) });
@@ -39,14 +40,14 @@ export function GenerarLigas({ cuenta }: { cuenta: Cuenta }) {
                 cargando={pidiendo}
                 title={
                     cuenta.google.conectada
-                        ? 'Google te manda UNA invitación a tu correo de ligas; la pegas en «Editar cuenta» y, cuando se use, generas la siguiente.'
+                        ? 'Google manda una invitación por cada lugar libre al buzón de ligas y cada liga se pone sola en su espacio.'
                         : 'Primero conecta la cuenta con Google (visor): inicia sesión una vez.'
                 }
             >
-                {generando ? 'Mandando liga…' : 'Generar liga'}
+                {generando ? 'Mandando invitaciones…' : 'Generar ligas'}
             </Boton>
 
-            {!cuenta.google.conectada && !progreso && <span className="text-xs text-tenue">Conéctala con el visor para generar la liga</span>}
+            {!cuenta.google.conectada && !progreso && <span className="text-xs text-tenue">Conéctala con el visor para generar las ligas</span>}
 
             {progreso && (
                 <span
@@ -56,10 +57,17 @@ export function GenerarLigas({ cuenta }: { cuenta: Cuenta }) {
                         progreso.estado === 'error' ? 'text-peligro' : progreso.estado === 'listo' ? 'text-exito' : 'text-suave',
                     )}
                 >
+                    {esperando && <LoaderCircle className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                     {progreso.estado === 'listo' && <CircleCheck className="size-3.5 shrink-0" aria-hidden="true" />}
                     {progreso.estado === 'error' && <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />}
                     <span className="min-w-0">
-                        {progreso.estado === 'generando' ? 'Mandando la liga a tu correo de ligas…' : progreso.mensaje}
+                        {progreso.estado === 'generando'
+                            ? progreso.total
+                                ? `Mandando invitaciones: ${progreso.enviadas} de ${progreso.total}${progreso.recibidas ? ` · ${progreso.recibidas} ${progreso.recibidas === 1 ? 'liga puesta' : 'ligas puestas'}` : ''}…`
+                                : 'Revisando el grupo en Google…'
+                            : esperando
+                              ? `Esperando los correos de Google: ${progreso.recibidas ?? 0} de ${progreso.enviadas} ligas puestas…`
+                              : progreso.mensaje}
                     </span>
                 </span>
             )}
