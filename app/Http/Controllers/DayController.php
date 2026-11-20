@@ -38,7 +38,7 @@ class DayController extends Controller
             'puedeEditarPublicidad' => $request->user()->isAdmin(),
             'vendedores' => Seller::query()->where('active', true)->ordered()->get(['id', 'name', 'is_owner']),
             'conEspacio' => Account::query()->active()->with('slots.seller')->orderBy('expires_on')->get()
-                ->filter(fn (Account $a): bool => $a->slots->count() < Account::capacity())
+                ->filter(fn (Account $a): bool => $a->tieneEspacioParaVender())
                 ->map(fn (Account $a): array => Presentar::cuenta($a))->values()->all(),
         ]);
     }

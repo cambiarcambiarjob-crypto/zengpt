@@ -34,6 +34,9 @@ return [
         'correos_ligas' => explode(',', (string) env('ZENBOT_CORREOS_LIGAS', '')),
         // Segundos que una acción espera su turno si el Chrome está ocupado con otra cuenta.
         'espera' => 15,
+        // Días que Google tarda en volver a dejar invitar cuando dice «Has alcanzado el límite de invitaciones al
+        // grupo familiar». Es un cálculo: la fecha exacta se puede corregir en «Editar cuenta».
+        'dias_bloqueo' => 7,
     ],
 
     /*

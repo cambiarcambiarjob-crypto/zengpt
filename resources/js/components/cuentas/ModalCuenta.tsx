@@ -1,5 +1,5 @@
 import { useForm } from '@inertiajs/react';
-import { CalendarClock, TriangleAlert } from 'lucide-react';
+import { Ban, CalendarClock, TriangleAlert } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { Boton } from '@/components/ui/Boton';
 import { Campo, CampoArea } from '@/components/ui/Campo';
@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
 import { diasEnPalabras, diasEntre, fechaMedia, plural, sumarDias } from '@/lib/formato';
 import { usePagina } from '@/lib/pagina';
+import { cuentaRegresiva, diaDelNegocio, useRestante } from '@/lib/reloj';
 import type { Compartido, Cuenta } from '@/types';
 import { esFechaIso, sumarMeses } from './utilidades';
 
@@ -29,6 +30,9 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
     const editando = cuenta !== null;
     const puedeFijar = editando && esAdmin;
     const idFijar = useId();
+    const idBloqueo = useId();
+    const bloqueoActual = cuenta?.google.bloqueo_hasta ?? null;
+    const restanteBloqueo = useRestante(bloqueoActual);
 
     // Una cuenta «con vencimiento fijado» es la que no vence en inicio + meses (alguien lo cambió a mano).
     const fijadaDeOrigen = cuenta !== null && cuenta.expires_on !== sumarMeses(cuenta.started_on, negocio.meses_cuenta);
@@ -41,6 +45,9 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
         started_on: cuenta?.started_on ?? negocio.hoy,
         expires_on: puedeFijar && fijadaDeOrigen ? cuenta.expires_on : '',
         notes: cuenta?.notes ?? '',
+        // Bloqueo de invitaciones de Google: el día en que se liberan (desde las 0:00 de ese día).
+        bloqueo: bloqueoActual !== null,
+        google_bloqueo_hasta: bloqueoActual ? diaDelNegocio(bloqueoActual) : sumarDias(negocio.hoy, 7),
         invite_links: Array.from({ length: negocio.capacidad }, (_, i) => {
             const liga = cuenta?.invite_links.find((l) => l.position === i + 1);
             return { url: liga?.url ?? '', expires_on: liga?.expires_on ?? sumarDias(negocio.hoy, 7) };
@@ -65,6 +72,7 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
             notes: datos.notes.trim(),
             invite_links: Object.fromEntries(datos.invite_links.map((l, i) => [String(i + 1), { url: l.url.trim(), expires_on: l.expires_on }])),
             ...(puedeFijar ? { expires_on: fijar ? datos.expires_on : '' } : {}),
+            ...(editando ? { google_bloqueo_hasta: datos.bloqueo ? datos.google_bloqueo_hasta : '' } : {}),
         }));
 
         const opciones = {
@@ -211,6 +219,44 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
                                 value={form.data.expires_on}
                                 onChange={(evento) => form.setData('expires_on', evento.target.value)}
                                 error={form.errors.expires_on}
+                            />
+                        )}
+                    </div>
+                )}
+
+                {editando && (
+                    <div className={cn('flex flex-col gap-3 rounded-campo border p-3 transition-colors', form.data.bloqueo ? 'border-peligro/40 bg-peligro/6' : 'border-borde')}>
+                        <div className="flex items-start gap-2.5">
+                            <input
+                                id={idBloqueo}
+                                type="checkbox"
+                                aria-describedby={`${idBloqueo}-ayuda`}
+                                className="mt-0.5 size-4 shrink-0 cursor-pointer accent-peligro"
+                                checked={form.data.bloqueo}
+                                onChange={(evento) => {
+                                    form.setData('bloqueo', evento.target.checked);
+                                    if (!evento.target.checked) form.clearErrors('google_bloqueo_hasta');
+                                }}
+                            />
+                            <div className="min-w-0">
+                                <label htmlFor={idBloqueo} className="flex cursor-pointer items-center gap-1.5 text-sm text-texto">
+                                    <Ban className={cn('size-3.5', form.data.bloqueo ? 'text-peligro' : 'text-tenue')} aria-hidden="true" />
+                                    Invitaciones bloqueadas por Google
+                                </label>
+                                <p id={`${idBloqueo}-ayuda`} className="text-[13px] leading-snug text-tenue">
+                                    Cuando Google dice «Has alcanzado el límite de invitaciones al grupo familiar». Sus espacios libres salen en rojo con la cuenta regresiva y no se ofrecen para vender.
+                                    {bloqueoActual && restanteBloqueo > 0 && <span className="text-peligro"> Ahora: se liberan en {cuentaRegresiva(restanteBloqueo)}.</span>}
+                                </p>
+                            </div>
+                        </div>
+                        {form.data.bloqueo && (
+                            <Campo
+                                etiqueta="Se liberan el"
+                                type="date"
+                                min={sumarDias(negocio.hoy, 1)}
+                                value={form.data.google_bloqueo_hasta}
+                                onChange={(evento) => form.setData('google_bloqueo_hasta', evento.target.value)}
+                                error={form.errors.google_bloqueo_hasta}
                             />
                         )}
                     </div>

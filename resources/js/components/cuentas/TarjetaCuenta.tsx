@@ -6,6 +6,7 @@ import { estadoDeCuenta, Insignia } from '@/components/ui/Insignia';
 import { cn } from '@/lib/cn';
 import { diasEnPalabras, diasEntre, dinero, fechaCorta } from '@/lib/formato';
 import type { Cuenta, Espacio } from '@/types';
+import { AvisoBloqueo, CasillaBloqueada } from './BloqueoGoogle';
 import { CasillaLibre, CasillaOcupada } from './CasillaEspacio';
 import { Copiable } from './Copiable';
 import { GoogleCuenta } from './GoogleCuenta';
@@ -44,6 +45,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
     // Ligas de invitación capturadas y vigentes (una por espacio).
     const ligas = cuenta.invite_links.filter((liga) => liga.url && (!liga.expires_on || liga.expires_on >= hoy)).length;
     const capacidad = cuenta.invite_links.length;
+    const bloqueo = cuenta.google.bloqueo_hasta;
 
     return (
         <article
@@ -121,6 +123,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                         </p>
                     )}
                     <GoogleCuenta cuenta={cuenta} />
+                    {!vencida && <AvisoBloqueo cuenta={cuenta} />}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-4 sm:gap-5">
@@ -153,8 +156,13 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                 {Array.from({ length: cuenta.capacidad }, (_, indice) => {
                     const espacio = porPosicion.get(indice + 1);
 
-                    return espacio ? (
-                        <CasillaOcupada key={`o${espacio.id}`} cuenta={cuenta} espacio={espacio} hoy={hoy} resaltada={coincideEspacio(espacio, busqueda)} alEditar={alEditarCliente} alLiberar={alLiberar} />
+                    if (espacio) {
+                        return <CasillaOcupada key={`o${espacio.id}`} cuenta={cuenta} espacio={espacio} hoy={hoy} resaltada={coincideEspacio(espacio, busqueda)} alEditar={alEditarCliente} alLiberar={alLiberar} />;
+                    }
+
+                    // Google no deja invitar por ahora: el espacio libre va en rojo con su cuenta regresiva.
+                    return bloqueo && !vencida ? (
+                        <CasillaBloqueada key={`b${indice}`} cuenta={cuenta} hasta={bloqueo} alAgregar={alAgregarCliente} />
                     ) : (
                         <CasillaLibre key={`l${indice}`} cuenta={cuenta} disponible={!vencida} alAgregar={alAgregarCliente} />
                     );

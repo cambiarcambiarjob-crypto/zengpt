@@ -39,6 +39,8 @@ final class Presentar
                 'revisada' => $account->google_synced_at?->toIso8601String(),
                 'extra' => $account->google_extra ?? [],
                 'ligas' => (int) $account->google_ligas,
+                // Google no deja invitar hasta esta fecha (ISO 8601); null = sin bloqueo o ya pasó.
+                'bloqueo_hasta' => $account->invitacionesBloqueadas() ? $account->google_bloqueo_hasta->toIso8601String() : null,
             ],
         ];
     }

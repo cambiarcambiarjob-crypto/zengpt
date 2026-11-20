@@ -5,10 +5,11 @@
 //
 //   node familia.cjs abrir           → abre el Chrome de la cuenta para el visor (se queda abierto)
 //   node familia.cjs cerrar          → cierra el Chrome de la cuenta (fin del visor)
-//   node familia.cjs leer            → {"ok":true,"admin":"…","miembros":[…],"invitaciones":[…]}
+//   node familia.cjs leer            → {"ok":true,"admin":"…","miembros":[…],"invitaciones":[…],"limite":false}
+//                                       (limite: alguna pestaña abierta, p. ej. la del visor, mostraba el límite de invitaciones)
 //   node familia.cjs invitar CORREO  → {"ok":true,"invitado":"correo"}
 //   node familia.cjs sacar CORREO    → {"ok":true,"sacado":"correo","era":"miembro"|"invitacion"}
-//   errores                          → {"ok":false,"error":"sin_sesion"|"sin_navegador"|"visor_ocupado"|"otra_cuenta"|"no_encontrado"|"sin_lugar"|"no_confirmado"|"…"}
+//   errores                          → {"ok":false,"error":"sin_sesion"|"sin_navegador"|"visor_ocupado"|"otra_cuenta"|"no_encontrado"|"sin_lugar"|"no_confirmado"|"limite_invitaciones"|"…"}
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -25,6 +26,9 @@ const ESTADO = path.join(PERFILES, '.estado.json');
 const VISOR_MINUTOS = 20;
 const BASE = 'https://myaccount.google.com/';
 const CORREO = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+// «Has alcanzado el límite de invitaciones al grupo familiar. Inténtalo de nuevo más tarde.» (Google deja de aceptar
+// invitaciones de la cuenta unos días).
+const LIMITE = /l[ií]mite de invitaciones|reached the limit[^.]{0,40}invit/i;
 // ZENBOT_ADMIN: correo esperado del administrador; si la sesión es de otra cuenta, no se hace nada.
 const ESPERADO = (process.env.ZENBOT_ADMIN || '').trim().toLowerCase();
 const [accion, objetivo] = [process.argv[2], (process.argv[3] || '').trim().toLowerCase()];
@@ -217,8 +221,12 @@ async function invitar(pagina, correo) {
     await campo.press('Enter');
     await pagina.waitForTimeout(1200);
     await pagina.getByRole('button', { name: 'Enviar', exact: true }).click();
-    await pagina.waitForURL(/invitationcomplete/, { timeout: 25000 }).catch(() => {});
+    // Termina en «invitationcomplete» o en «Tu invitación no se ha enviado» (p. ej. por el límite de invitaciones).
+    await pagina
+        .waitForFunction((patron) => /invitationcomplete/.test(location.href) || new RegExp(patron, 'i').test(document.body.innerText), LIMITE.source, { timeout: 25000 })
+        .catch(() => {});
     if (!/invitationcomplete/.test(pagina.url())) {
+        if (LIMITE.test(await pagina.innerText('body').catch(() => ''))) throw falla('limite_invitaciones');
         if (!pagina.url().startsWith(BASE)) throw falla('sin_sesion');
         throw falla('no_confirmado');
     }
@@ -283,6 +291,13 @@ async function sacar(pagina, correo) {
     if (!estado.visor) alSalir = () => cerrarChrome(leerEstado());
 
     const contexto = navegador.contexts()[0];
+    // Lo que ya estaba en pantalla (el visor): ¿Google mostraba el límite de invitaciones?
+    let limite = false;
+    if (accion === 'leer') {
+        for (const abierta of contexto.pages()) {
+            if (LIMITE.test(await abierta.innerText('body', { timeout: 3000 }).catch(() => ''))) limite = true;
+        }
+    }
     const pagina = (pestana = await contexto.newPage());
     try {
         if (accion === 'abrir') {
@@ -296,7 +311,7 @@ async function sacar(pagina, correo) {
         }
         if (accion === 'leer') {
             const grupo = await leer(pagina);
-            return await salir({ ok: true, ...grupo, leido: new Date().toISOString() });
+            return await salir({ ok: true, ...grupo, limite, leido: new Date().toISOString() });
         }
         if (['invitar', 'sacar', 'ver-quitar'].includes(accion) && CORREO.test(objetivo)) {
             return await salir(accion === 'invitar' ? await invitar(pagina, objetivo) : await sacar(pagina, objetivo));

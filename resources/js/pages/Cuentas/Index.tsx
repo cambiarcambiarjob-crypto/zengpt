@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { CircleCheck, Plus, SearchX } from 'lucide-react';
+import { Ban, CircleCheck, Plus, SearchX } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Buscador } from '@/components/cuentas/Buscador';
 import { ModalCuenta } from '@/components/cuentas/ModalCuenta';
@@ -27,6 +27,7 @@ const ESTADOS: { valor: EstadoFiltro; etiqueta: string }[] = [
     { valor: 'con_espacio', etiqueta: 'Con espacio' },
     { valor: 'por_cobrar', etiqueta: 'Por cobrar' },
     { valor: 'llenas', etiqueta: 'Llenas' },
+    { valor: 'bloqueadas', etiqueta: 'Bloqueadas' },
     { valor: 'vencidas', etiqueta: 'Vencidas' },
     { valor: 'todas', etiqueta: 'Todas' },
 ];
@@ -46,7 +47,7 @@ function recuperarFoco(cuentaId?: number): void {
 }
 
 export default function CuentasIndex() {
-    const { cuentas, filtros, vendedores, negocio, auth, llenas } = usePagina<CuentasProps>();
+    const { cuentas, filtros, vendedores, negocio, auth, llenas, bloqueadas } = usePagina<CuentasProps>();
     const esAdmin = auth.user?.is_admin === true;
 
     // ── Búsqueda con pausa ────────────────────────────────────────────────────────────────────────────────────────
@@ -211,15 +212,22 @@ export default function CuentasIndex() {
 
     // ── Textos ────────────────────────────────────────────────────────────────────────────────────────────────────
     const qLimpia = q.trim();
+    // «Bloqueadas» (invitaciones bloqueadas por Google) solo aparece cuando hay alguna, o si ya estás en ella.
     const opcionesEstado = useMemo(
-        () => ESTADOS.map((opcion) => ({ ...opcion, etiqueta: opcion.valor === 'llenas' && llenas > 0 ? `Llenas · ${llenas}` : opcion.etiqueta, href: urlCuentas(opcion.valor, qLimpia) })),
-        [qLimpia, llenas],
+        () =>
+            ESTADOS.filter((opcion) => opcion.valor !== 'bloqueadas' || bloqueadas > 0 || filtros.estado === 'bloqueadas').map((opcion) => {
+                const cuantas = opcion.valor === 'llenas' ? llenas : opcion.valor === 'bloqueadas' ? bloqueadas : 0;
+                return { ...opcion, etiqueta: cuantas > 0 ? `${opcion.etiqueta} · ${cuantas}` : opcion.etiqueta, href: urlCuentas(opcion.valor, qLimpia) };
+            }),
+        [qLimpia, llenas, bloqueadas, filtros.estado],
     );
     const busquedaAplicada = useMemo(() => filtros.q.toLowerCase(), [filtros.q]);
 
     const total = cuentas.length;
-    const libres = cuentas.reduce((suma, cuenta) => suma + (cuenta.activa ? cuenta.libres : 0), 0);
+    // Libres = los que se pueden vender hoy (sin contar los de cuentas con el bloqueo de Google).
+    const libres = cuentas.reduce((suma, cuenta) => suma + (cuenta.activa && !cuenta.google.bloqueo_hasta ? cuenta.libres : 0), 0);
     const textoLibres = libres === 1 ? '1 espacio libre' : `${plural(libres, 'espacio')} libres`;
+    const libresBloqueados = cuentas.reduce((suma, cuenta) => suma + (cuenta.activa && cuenta.google.bloqueo_hasta ? cuenta.libres : 0), 0);
 
     let descripcion: string;
     if (filtros.q !== '') {
@@ -232,10 +240,16 @@ export default function CuentasIndex() {
         descripcion = total === 0 ? 'Nadie pendiente de pago' : `${plural(total, 'cuenta')} con clientes pendientes de pago`;
     } else if (filtros.estado === 'llenas') {
         descripcion = total === 0 ? 'Ninguna cuenta llena todavía' : `${plural(total, 'cuenta llena', 'cuentas llenas')}: ${negocio.capacidad} de ${negocio.capacidad}, todos pagados y dentro del grupo`;
+    } else if (filtros.estado === 'bloqueadas') {
+        descripcion =
+            total === 0
+                ? 'Ninguna cuenta con invitaciones bloqueadas por Google'
+                : `${plural(total, 'cuenta')} con invitaciones bloqueadas por Google · ${plural(libresBloqueados, 'espacio libre', 'espacios libres')} en espera`;
     } else if (filtros.estado === 'con_espacio') {
         descripcion = total === 0 ? 'Ninguna cuenta con espacio' : `${plural(total, 'cuenta')} con espacio · ${textoLibres}`;
     } else {
         descripcion = total === 0 ? 'Ninguna cuenta activa' : `${plural(total, 'cuenta activa', 'cuentas activas')} · ${textoLibres}`;
+        if (libresBloqueados > 0) descripcion += ` · ${plural(libresBloqueados, 'bloqueado', 'bloqueados')} por Google`;
         if (llenas > 0) descripcion += ` · ${plural(llenas, 'llena', 'llenas')} aparte`;
     }
 
@@ -318,6 +332,14 @@ export default function CuentasIndex() {
                         icono={<CircleCheck className="size-5" />}
                         titulo="Ninguna cuenta llena todavía"
                         descripcion={`Cuando una cuenta tenga sus ${plural(negocio.capacidad, 'espacio')} ocupados, todos pagados y dentro del grupo, se pasa sola aquí para no ocupar lugar en «Activas».`}
+                    />
+                </Tarjeta>
+            ) : filtros.estado === 'bloqueadas' ? (
+                <Tarjeta className="animate-entrada">
+                    <EstadoVacio
+                        icono={<Ban className="size-5" />}
+                        titulo="Ninguna cuenta bloqueada por Google"
+                        descripcion={'Cuando Google diga «Has alcanzado el límite de invitaciones al grupo familiar», la cuenta aparece aquí con sus espacios libres en rojo y la cuenta regresiva hasta que se liberan.'}
                     />
                 </Tarjeta>
             ) : filtros.estado === 'vencidas' ? (

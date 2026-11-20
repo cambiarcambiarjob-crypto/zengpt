@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Hoy;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -18,7 +19,7 @@ class Account extends Model
 
     protected function casts(): array
     {
-        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array', 'google_extra' => 'array', 'google_conectada' => 'boolean', 'google_ligas' => 'integer', 'google_synced_at' => 'datetime'];
+        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array', 'google_extra' => 'array', 'google_conectada' => 'boolean', 'google_ligas' => 'integer', 'google_synced_at' => 'datetime', 'google_bloqueo_hasta' => 'datetime'];
     }
 
     public function setEmailAttribute(string $value): void
@@ -60,6 +61,52 @@ class Account extends Model
             && $slots->count() >= self::capacity()
             && $slots->every(fn (Slot $slot): bool => $slot->paid_on !== null
                 && ($conectada ? $slot->google_status === 'miembro' : $slot->invite_accepted_at !== null));
+    }
+
+    /**
+     * Google no deja invitar a nadie más al grupo por ahora («límite de invitaciones»): sus espacios libres no se
+     * pueden vender hasta `google_bloqueo_hasta`. Al pasar esa fecha deja de estar bloqueada sola.
+     */
+    public function invitacionesBloqueadas(): bool
+    {
+        return $this->google_bloqueo_hasta !== null && $this->google_bloqueo_hasta->isFuture();
+    }
+
+    /**
+     * Marca el bloqueo de Google. Sin fecha, dura los días de config('zengpt.google.dias_bloqueo') desde ahora; si ya
+     * estaba bloqueada, se respeta la fecha que tenía (volver a toparse con el límite no la alarga).
+     */
+    public function bloquearInvitaciones(?CarbonInterface $hasta = null): void
+    {
+        if ($hasta === null && $this->invitacionesBloqueadas()) {
+            return;
+        }
+
+        $hasta ??= now()->addDays((int) config('zengpt.google.dias_bloqueo', 7));
+
+        // La base guarda la hora tal cual: se pasa a la zona de la aplicación (p. ej. de las 0:00 de Chihuahua a UTC).
+        $this->forceFill(['google_bloqueo_hasta' => $hasta->copy()->setTimezone(config('app.timezone'))])->save();
+    }
+
+    /** «27 de noviembre, 0:30» (hora del negocio) o null si no está bloqueada. */
+    public function bloqueoHastaTexto(): ?string
+    {
+        return $this->invitacionesBloqueadas()
+            ? $this->google_bloqueo_hasta->copy()->setTimezone(config('zengpt.zona', 'America/Chihuahua'))->locale('es')->isoFormat('D [de] MMMM, H:mm')
+            : null;
+    }
+
+    public function desbloquearInvitaciones(): void
+    {
+        if ($this->google_bloqueo_hasta !== null) {
+            $this->forceFill(['google_bloqueo_hasta' => null])->save();
+        }
+    }
+
+    /** Vigente, con algún espacio libre y sin bloqueo de Google: se le puede acomodar un cliente nuevo hoy. */
+    public function tieneEspacioParaVender(): bool
+    {
+        return $this->isActive() && $this->slots->count() < self::capacity() && ! $this->invitacionesBloqueadas();
     }
 
     public function daysLeft(): int

@@ -27,6 +27,7 @@ class VisorGoogleController extends Controller
     {
         return response()->view('visor-google', [
             'cuenta' => $account,
+            'bloqueo' => $account->bloqueoHastaTexto(),
             'tiene2fa' => GrupoGoogle::secreto2fa($account->twofa_url) !== '',
         ])->header('Cache-Control', 'no-store');
     }
@@ -81,6 +82,8 @@ class VisorGoogleController extends Controller
             // El Chrome se cierra solo al pasar el tiempo del visor.
         }
 
-        return redirect('/cuentas')->with('success', "Sesión de Google lista para {$account->email}. Grupo revisado.");
+        $bloqueo = $account->refresh()->bloqueoHastaTexto();
+
+        return redirect('/cuentas')->with('success', "Sesión de Google lista para {$account->email}. Grupo revisado.".($bloqueo ? " Google no deja invitar: quedó bloqueada hasta el {$bloqueo}." : ''));
     }
 }

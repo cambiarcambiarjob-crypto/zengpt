@@ -22,6 +22,9 @@ class DashboardController extends Controller
         $activas = Account::query()->active()->with('slots.seller')->orderBy('expires_on')->get();
         $ocupados = $activas->sum(fn (Account $a): int => $a->slots->count());
         $capacidadTotal = $activas->count() * Account::capacity();
+        // Espacios libres en cuentas donde Google no deja invitar por ahora: no se pueden vender todavía.
+        $bloqueados = $activas->filter(fn (Account $a): bool => $a->invitacionesBloqueadas())
+            ->sum(fn (Account $a): int => max(0, Account::capacity() - $a->slots->count()));
 
         return Inertia::render('Dashboard', [
             'hoy' => ['fecha' => $fecha] + Resumen::totales($fecha, $fecha),
@@ -33,14 +36,15 @@ class DashboardController extends Controller
                 'activas' => $activas->count(),
                 'vencidas' => Account::query()->expired()->count(),
                 'espacios_ocupados' => $ocupados,
-                'espacios_libres' => $capacidadTotal - $ocupados,
+                'espacios_libres' => $capacidadTotal - $ocupados - $bloqueados,
+                'espacios_bloqueados' => $bloqueados,
                 'capacidad_total' => $capacidadTotal,
                 'clientes' => Slot::query()->count(),
                 'pendientes_pago' => Slot::query()->whereNull('paid_on')->count(),
                 'pendiente_monto' => (int) Slot::query()->whereNull('paid_on')->sum('price_cents'),
             ],
             // Cuentas vigentes con lugar: «las opciones que tengo» para acomodar al siguiente cliente.
-            'conEspacio' => $activas->filter(fn (Account $a): bool => $a->slots->count() < Account::capacity())
+            'conEspacio' => $activas->filter(fn (Account $a): bool => $a->tieneEspacioParaVender())
                 ->map(fn (Account $a): array => Presentar::cuenta($a))->values()->all(),
             'porVencer' => $activas->filter(fn (Account $a): bool => $a->daysLeft() <= (int) config('zengpt.dias_aviso'))
                 ->map(fn (Account $a): array => Presentar::cuenta($a))->values()->all(),

@@ -58,7 +58,9 @@ class GrupoGoogle
     }
 
     /**
-     * @return array{admin: ?string, miembros: list<array{email: string, admin: bool}>, invitaciones: list<array{email: string, caduca: ?string}>}
+     * `limite`: en el Chrome de la cuenta (p. ej. en el visor) Google mostraba «Has alcanzado el límite de invitaciones».
+     *
+     * @return array{admin: ?string, miembros: list<array{email: string, admin: bool}>, invitaciones: list<array{email: string, caduca: ?string}>, limite: bool}
      */
     public function leer(Account $account): array
     {
@@ -67,7 +69,7 @@ class GrupoGoogle
             throw new RuntimeException('La sesión del servidor es de otra cuenta: no se hizo nada.');
         }
 
-        return ['admin' => $datos['admin'] ?? null, 'miembros' => $datos['miembros'] ?? [], 'invitaciones' => $datos['invitaciones'] ?? []];
+        return ['admin' => $datos['admin'] ?? null, 'miembros' => $datos['miembros'] ?? [], 'invitaciones' => $datos['invitaciones'] ?? [], 'limite' => (bool) ($datos['limite'] ?? false)];
     }
 
     /**
@@ -85,11 +87,15 @@ class GrupoGoogle
         $this->ejecutar($account, ['cerrar'], 30, requiereConexion: false);
     }
 
-    /** Manda la invitación de Google al cliente y lo marca como invitado. */
+    /**
+     * Manda la invitación de Google al cliente y lo marca como invitado. Si Google la aceptó, ya pasó su límite de
+     * invitaciones: se quita el bloqueo de la cuenta.
+     */
     public function invitar(Slot $slot): void
     {
         $this->ejecutar($slot->account, ['invitar', $slot->client_email], 80);
         $slot->forceFill(['google_status' => 'invitado', 'invite_sent_at' => $slot->invite_sent_at ?? now(), 'invite_accepted_at' => null])->save();
+        $slot->account->desbloquearInvitaciones();
     }
 
     /**
@@ -115,11 +121,16 @@ class GrupoGoogle
      * Marca a cada cliente como miembro / invitado / ausente según Google y da de alta (sin precio ni vendedor,
      * pendientes de pago) a quienes están en Google pero no en el sistema, mientras haya espacio.
      *
-     * @return array{miembros: int, invitados: int, ausentes: int, agregados: int, extra: int, ligas: int}
+     * Si en el Chrome de la cuenta Google mostraba el límite de invitaciones, la cuenta queda bloqueada.
+     *
+     * @return array{miembros: int, invitados: int, ausentes: int, agregados: int, extra: int, ligas: int, bloqueo: ?string}
      */
     public function sincronizar(Account $account): array
     {
         $grupo = $this->leer($account);
+        if ($grupo['limite']) {
+            $account->bloquearInvitaciones();
+        }
         $miembros = collect($grupo['miembros'])->reject(fn (array $m): bool => (bool) ($m['admin'] ?? false))->pluck('email')->map(fn ($e) => mb_strtolower($e));
         $invitados = collect($grupo['invitaciones'])->pluck('email')->map(fn ($e) => mb_strtolower($e));
         // Las invitaciones al correo de ligas son ligas por mandar, no clientes: no ocupan espacio en el sistema.
@@ -177,7 +188,7 @@ class GrupoGoogle
             $cuenta->forceFill(['google_synced_at' => now(), 'google_extra' => $sinLugar, 'google_conectada' => true, 'google_ligas' => $ligas])->save();
         });
 
-        return $resumen;
+        return $resumen + ['bloqueo' => $account->bloqueoHastaTexto()];
     }
 
     /** Clave base32 del 2FA a partir de la liga guardada (p. ej. https://api2fa.com/CLAVE → CLAVE). */
@@ -248,6 +259,14 @@ class GrupoGoogle
         if (! ($datos['ok'] ?? false)) {
             if (filled($datos['detalle'] ?? null)) {
                 Log::info("zenbot {$account->email}: {$datos['error']} en {$datos['detalle']}");
+            }
+
+            // «Has alcanzado el límite de invitaciones al grupo familiar»: se marca el bloqueo (sus espacios libres
+            // salen en rojo con la cuenta regresiva) y se avisa hasta cuándo.
+            if (($datos['error'] ?? '') === 'limite_invitaciones') {
+                $account->bloquearInvitaciones();
+
+                throw new RuntimeException("Google no deja invitar a nadie más por ahora (límite de invitaciones del grupo familiar). La cuenta quedó marcada como bloqueada hasta el {$account->bloqueoHastaTexto()}; si Google la libera antes o después, ajústalo en «Editar cuenta».");
             }
 
             throw new RuntimeException(code: ($datos['error'] ?? '') === 'no_encontrado' ? self::NO_ENCONTRADO : 0, message: match ($datos['error'] ?? '') {

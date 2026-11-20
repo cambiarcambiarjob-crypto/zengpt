@@ -44,6 +44,11 @@
         .aviso { font-size: 12px; padding: 8px 10px; border-radius: 5px; display: none; }
         .aviso.ok { display: block; background: rgba(27,169,129,.12); color: var(--acento); }
         .aviso.mal { display: block; background: rgba(229,83,75,.12); color: var(--peligro); }
+        .bloqueo { margin-top: auto; padding: 10px; border: 1px solid rgba(229,83,75,.35); border-radius: 6px; background: rgba(229,83,75,.07); font-size: 12px; color: var(--suave); display: grid; gap: 8px; }
+        .bloqueo p { margin: 0; line-height: 1.4; }
+        .bloqueo b { color: var(--peligro); }
+        button.peligro { border-color: rgba(229,83,75,.5); color: var(--peligro); }
+        button.peligro:hover { background: rgba(229,83,75,.12); border-color: var(--peligro); color: var(--peligro); }
         a { color: var(--acento); }
         @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-template-rows: 60vh auto; } aside { border-left: 0; border-top: 1px solid var(--borde); } }
     </style>
@@ -113,7 +118,29 @@
             @if (session('error'))
                 <div class="aviso mal">{{ session('error') }}</div>
             @endif
+            @if (session('success'))
+                <div class="aviso ok">{{ session('success') }}</div>
+            @endif
             <div id="aviso" class="aviso"></div>
+
+            {{-- Si al invitar Google dice «Has alcanzado el límite de invitaciones al grupo familiar». «Revisar grupo» también lo detecta solo. --}}
+            <div class="bloqueo">
+                @if ($bloqueo)
+                    <p><b>Invitaciones inválidas por Google</b> hasta el {{ $bloqueo }}.</p>
+                    <form method="POST" action="/cuentas/{{ $cuenta->id }}/bloqueo">
+                        @csrf @method('PUT')
+                        <input type="hidden" name="accion" value="quitar">
+                        <button type="submit" style="width:100%">Google ya deja invitar · quitar bloqueo</button>
+                    </form>
+                @else
+                    <p>¿Google dice <i>«Has alcanzado el límite de invitaciones al grupo familiar»</i>?</p>
+                    <form method="POST" action="/cuentas/{{ $cuenta->id }}/bloqueo">
+                        @csrf @method('PUT')
+                        <input type="hidden" name="accion" value="bloquear">
+                        <button type="submit" class="peligro" style="width:100%">Marcar invitaciones bloqueadas ({{ config('zengpt.google.dias_bloqueo', 7) }} días)</button>
+                    </form>
+                @endif
+            </div>
         </aside>
     </main>
 

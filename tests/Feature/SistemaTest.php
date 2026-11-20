@@ -14,6 +14,7 @@ use App\Support\Presentar;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -414,6 +415,85 @@ class SistemaTest extends TestCase
         // En cuanto alguien deja de estar al corriente, regresa sola a «Activas».
         Slot::query()->where('account_id', $llena->id)->where('position', 2)->update(['paid_on' => null]);
         $this->assertSame(['conectada@gmail.com'], $correos('/cuentas?estado=llenas'));
+    }
+
+    public function test_el_limite_de_invitaciones_de_google_bloquea_los_espacios_libres_con_cuenta_regresiva(): void
+    {
+        $this->freezeSecond();
+        config(['zengpt.google.cuentas' => ['admin.grupo@gmail.com'], 'zengpt.google.dias_bloqueo' => 7]);
+        $cuenta = $this->cuenta(['email' => 'admin.grupo@gmail.com']);
+        $libre = $this->cuenta();
+        $jorge = $this->vendedor('Jorge');
+        foreach (['uno@gmail.com', 'dos@gmail.com', 'nuevo@gmail.com'] as $i => $correo) {
+            Slot::query()->create(['account_id' => $cuenta->id, 'position' => $i + 1, 'client_email' => $correo, 'price_cents' => 20000, 'seller_id' => $jorge->id, 'sold_on' => Hoy::fecha(), 'paid_on' => Hoy::fecha()]);
+        }
+        $nuevo = Slot::query()->where('client_email', 'nuevo@gmail.com')->firstOrFail();
+        $limite = fn () => Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'limite_invitaciones']), exitCode: 1)]);
+
+        // Al invitar, Google dice «Has alcanzado el límite de invitaciones»: la cuenta queda bloqueada 7 días.
+        $limite();
+        $this->actingAs($this->socio)->post("/espacios/{$nuevo->id}/google")->assertSessionHas('error', fn (string $m): bool => str_contains($m, 'límite de invitaciones'));
+        $hasta = now()->addDays(7);
+        $this->assertSame($hasta->toDateTimeString(), $cuenta->fresh()->google_bloqueo_hasta->toDateTimeString());
+        $this->assertTrue($cuenta->fresh()->invitacionesBloqueadas());
+        $this->assertSame($hasta->toIso8601String(), Presentar::cuenta($cuenta->fresh()->load('slots'))['google']['bloqueo_hasta']);
+        $this->assertNull(Presentar::cuenta($libre->load('slots'))['google']['bloqueo_hasta']);
+
+        // Sus espacios libres no se ofrecen para vender: pestaña «Bloqueadas», fuera de «Con espacio» y del panel.
+        $this->actingAs($this->socio)->get('/cuentas?estado=bloqueadas')->assertInertia(fn (Assert $p) => $p
+            ->where('bloqueadas', 1)->has('cuentas', 1)->where('cuentas.0.email', 'admin.grupo@gmail.com'));
+        $this->actingAs($this->socio)->get('/cuentas?estado=con_espacio')->assertInertia(fn (Assert $p) => $p->has('cuentas', 1)->where('cuentas.0.id', $libre->id));
+        $this->actingAs($this->socio)->get('/cuentas')->assertInertia(fn (Assert $p) => $p->has('cuentas', 2));
+        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $p) => $p
+            ->where('cuentas.espacios_libres', 5)->where('cuentas.espacios_bloqueados', 2)->has('conEspacio', 1)->where('conEspacio.0.id', $libre->id));
+        $this->actingAs($this->admin)->get('/dia')->assertInertia(fn (Assert $p) => $p->has('conEspacio', 1));
+
+        // Toparse otra vez con el límite no alarga el bloqueo.
+        $this->travel(2)->days();
+        $limite();
+        $this->actingAs($this->socio)->post("/espacios/{$nuevo->id}/google")->assertSessionHas('error');
+        $this->assertSame($hasta->toDateTimeString(), $cuenta->fresh()->google_bloqueo_hasta->toDateTimeString());
+
+        // Si Google ya acepta una invitación, el bloqueo se quita solo.
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'invitado' => 'nuevo@gmail.com']))]);
+        $this->actingAs($this->socio)->post("/espacios/{$nuevo->id}/google")->assertSessionHas('success');
+        $this->assertNull($cuenta->fresh()->google_bloqueo_hasta);
+
+        // Visor: al revisar el grupo, si la pantalla mostraba el límite de invitaciones, también se bloquea.
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'admin' => 'admin.grupo@gmail.com', 'miembros' => [['email' => 'admin.grupo@gmail.com', 'admin' => true]], 'invitaciones' => [], 'limite' => true]))]);
+        $this->actingAs($this->socio)->post("/google/visor/{$cuenta->id}/listo")->assertRedirect('/cuentas')->assertSessionHas('success', fn (string $m): bool => str_contains($m, 'Google no deja invitar'));
+        $this->assertTrue($cuenta->fresh()->invitacionesBloqueadas());
+
+        // Con un clic (visor o tarjeta): quitar y volver a marcar.
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}/bloqueo", ['accion' => 'quitar'])->assertSessionHas('success');
+        $this->assertFalse($cuenta->fresh()->invitacionesBloqueadas());
+        $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertSee('Marcar invitaciones bloqueadas');
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}/bloqueo", ['accion' => 'bloquear'])->assertSessionHas('success');
+        $this->assertSame(now()->addDays(7)->toDateTimeString(), $cuenta->fresh()->google_bloqueo_hasta->toDateTimeString());
+        $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertSee('Invitaciones inválidas por Google');
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}/bloqueo", ['accion' => 'otra'])->assertSessionHasErrors('accion');
+
+        // A mano en «Editar cuenta»: el día en que se liberan (desde las 0:00, hora del negocio).
+        $datos = ['email' => $cuenta->email, 'started_on' => $cuenta->started_on->toDateString(), 'notes' => ''];
+        $dia = Hoy::carbon()->addDays(3)->toDateString();
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}", $datos + ['google_bloqueo_hasta' => $dia])->assertSessionHasNoErrors();
+        $this->assertTrue($cuenta->fresh()->google_bloqueo_hasta->equalTo(Carbon::parse($dia, 'America/Chihuahua')->startOfDay()));
+        // Guardar otra vez con el mismo día conserva la hora exacta; sin el campo, no se toca.
+        $cuenta->bloquearInvitaciones(Carbon::parse($dia.' 15:30', 'America/Chihuahua'));
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}", $datos + ['google_bloqueo_hasta' => $dia])->assertSessionHasNoErrors();
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}", $datos)->assertSessionHasNoErrors();
+        $this->assertTrue($cuenta->fresh()->google_bloqueo_hasta->equalTo(Carbon::parse($dia.' 15:30', 'America/Chihuahua')));
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}", $datos + ['google_bloqueo_hasta' => Hoy::carbon()->subDay()->toDateString()])->assertSessionHasErrors('google_bloqueo_hasta');
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}", $datos + ['google_bloqueo_hasta' => ''])->assertSessionHasNoErrors();
+        $this->assertNull($cuenta->fresh()->google_bloqueo_hasta);
+
+        // Al pasar la fecha se libera sola y vuelve a «Con espacio».
+        $this->actingAs($this->socio)->put("/cuentas/{$cuenta->id}/bloqueo", ['accion' => 'bloquear']);
+        $this->travel(7)->days();
+        $this->travel(1)->minutes();
+        $this->assertFalse($cuenta->fresh()->invitacionesBloqueadas());
+        $this->assertNull(Presentar::cuenta($cuenta->fresh()->load('slots'))['google']['bloqueo_hasta']);
+        $this->actingAs($this->socio)->get('/cuentas?estado=con_espacio')->assertInertia(fn (Assert $p) => $p->has('cuentas', 2)->where('bloqueadas', 0));
     }
 
     public function test_revisar_el_grupo_en_google_marca_a_cada_cliente(): void

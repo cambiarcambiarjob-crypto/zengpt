@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { UserPlus, UserX } from 'lucide-react';
+import { Ban, UserPlus, UserX } from 'lucide-react';
 import { useState } from 'react';
 import { Confirmar } from '@/components/ui/Confirmar';
 import { cn } from '@/lib/cn';
@@ -25,6 +25,16 @@ export function GoogleEspacio({ cuenta, espacio }: { cuenta: Cuenta; espacio: Es
     const dentro = espacio.google_status === 'miembro' || espacio.google_status === 'invitado';
     const estado = ESTADO[espacio.google_status === 'miembro' ? 'miembro' : espacio.google_status === 'invitado' ? 'invitado' : 'fuera'];
     const opciones = { preserveScroll: true, preserveState: true, onStart: () => setTrabajando(true), onFinish: () => { setTrabajando(false); setConfirmando(false); } };
+
+    // Sin invitar y con el bloqueo de Google: no se puede invitar todavía (en vez de «Sin invitar» + «Invitar»).
+    if (!dentro && cuenta.google.bloqueo_hasta) {
+        return (
+            <span className={cn(ETIQUETA, 'gap-1 border-peligro/40 bg-peligro/10 text-peligro')} title="Invitación inválida por Google: no deja invitar a nadie más a esta cuenta por ahora (límite de invitaciones). Invítalo cuando se libere.">
+                <Ban className="size-3" aria-hidden="true" />
+                Inválida por Google
+            </span>
+        );
+    }
 
     return (
         <>

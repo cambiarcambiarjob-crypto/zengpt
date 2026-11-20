@@ -19,12 +19,13 @@ class AccountController extends Controller
 {
     public function index(Request $request): Response
     {
-        $estado = in_array($request->query('estado'), ['activas', 'llenas', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
+        $estado = in_array($request->query('estado'), ['activas', 'llenas', 'bloqueadas', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
         $q = trim((string) $request->query('q'));
 
         $cuentas = Account::query()
             ->with('slots.seller')
-            ->when(in_array($estado, ['activas', 'llenas', 'con_espacio'], true), fn ($query) => $query->active())
+            ->when(in_array($estado, ['activas', 'llenas', 'bloqueadas', 'con_espacio'], true), fn ($query) => $query->active())
+            ->when($estado === 'bloqueadas', fn ($query) => $query->where('google_bloqueo_hasta', '>', now()))
             ->when($estado === 'vencidas', fn ($query) => $query->expired())
             ->when($estado === 'por_cobrar', fn ($query) => $query->whereHas('slots', fn ($s) => $s->whereNull('paid_on')))
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
@@ -32,7 +33,8 @@ class AccountController extends Controller
                 ->orWhereHas('slots', fn ($s) => $s->where('client_email', 'like', "%{$q}%")->orWhere('client_phone', 'like', "%{$q}%"))))
             ->orderByDesc('started_on')->orderByDesc('id')
             ->get()
-            ->when($estado === 'con_espacio', fn ($c) => $c->filter(fn (Account $a): bool => $a->slots->count() < Account::capacity()))
+            // «Con espacio» = donde se puede acomodar a alguien hoy: sin el bloqueo de invitaciones de Google.
+            ->when($estado === 'con_espacio', fn ($c) => $c->filter(fn (Account $a): bool => $a->tieneEspacioParaVender()))
             // Las llenas (5 ocupados, todos pagados y dentro del grupo) se apartan de «Activas»; al buscar sí aparecen.
             ->when($estado === 'activas' && $q === '', fn ($c) => $c->reject(fn (Account $a): bool => $a->estaLlena(GrupoGoogle::conectada($a))))
             ->when($estado === 'llenas', fn ($c) => $c->filter(fn (Account $a): bool => $a->estaLlena(GrupoGoogle::conectada($a))))
@@ -45,6 +47,7 @@ class AccountController extends Controller
             'cuentas' => $cuentas,
             'filtros' => ['estado' => $estado, 'q' => $q],
             'llenas' => $llenas,
+            'bloqueadas' => Account::query()->active()->where('google_bloqueo_hasta', '>', now())->count(),
             'vendedores' => Seller::query()->where('active', true)->ordered()->get(['id', 'name', 'is_owner']),
         ]);
     }
@@ -87,9 +90,52 @@ class AccountController extends Controller
             'notes' => $data['notes'] ?? null,
         ]);
 
+        // Bloqueo de invitaciones de Google capturado a mano: «se liberan el …» (vacío = ya no está bloqueada).
+        if ($request->exists('google_bloqueo_hasta')) {
+            $this->fijarBloqueo($account, $data['google_bloqueo_hasta'] ?? null);
+        }
+
         $account->syncInviteLinks();
 
         return back()->with('success', 'Cuenta actualizada.');
+    }
+
+    /**
+     * Bloqueo de invitaciones de Google con un clic (desde el visor o la tarjeta de la cuenta): `bloquear` lo marca por
+     * los días de config('zengpt.google.dias_bloqueo') y `quitar` lo quita (Google ya deja invitar).
+     */
+    public function bloqueo(Request $request, Account $account): RedirectResponse
+    {
+        $accion = $request->validate(['accion' => ['required', Rule::in(['bloquear', 'quitar'])]])['accion'];
+
+        if ($accion === 'quitar') {
+            $account->desbloquearInvitaciones();
+
+            return back()->with('success', "Listo: {$account->email} ya puede invitar de nuevo.");
+        }
+
+        $account->bloquearInvitaciones();
+
+        return back()->with('success', "Invitaciones de {$account->email} marcadas como bloqueadas por Google hasta el {$account->bloqueoHastaTexto()}.");
+    }
+
+    /** Fija el bloqueo desde el formulario: la fecha en que Google vuelve a dejar invitar (desde las 0:00 de ese día). */
+    private function fijarBloqueo(Account $account, ?string $fecha): void
+    {
+        if (blank($fecha)) {
+            $account->desbloquearInvitaciones();
+
+            return;
+        }
+
+        $zona = config('zengpt.zona', 'America/Chihuahua');
+
+        // Si la fecha es la misma que ya tenía (p. ej. la que puso Google sola), se conserva la hora exacta.
+        if ($account->invitacionesBloqueadas() && $account->google_bloqueo_hasta->copy()->setTimezone($zona)->toDateString() === $fecha) {
+            return;
+        }
+
+        $account->bloquearInvitaciones(Carbon::parse($fecha, $zona)->startOfDay());
     }
 
     public function destroy(Request $request, Account $account): RedirectResponse
@@ -126,6 +172,7 @@ class AccountController extends Controller
             $r['ausentes'] ? "{$r['ausentes']} que no aparecen" : null,
             $r['extra'] ? "{$r['extra']} sin espacio libre en la cuenta" : null,
             ($r['ligas'] ?? 0) ? "{$r['ligas']} ligas por mandar" : null,
+            $r['bloqueo'] ? "invitaciones bloqueadas por Google hasta el {$r['bloqueo']}" : null,
         ]);
 
         return back()->with('success', 'Revisado en Google: '.($partes ? implode(' · ', $partes) : 'el grupo está vacío').'.');
@@ -164,6 +211,8 @@ class AccountController extends Controller
             'started_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.Hoy::carbon()->addDay()->toDateString()],
             'expires_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:started_on'],
             'notes' => ['nullable', 'string', 'max:500'],
-        ], ['email.unique' => 'Esa cuenta ya está registrada.'], ['email' => 'correo de la cuenta', 'password' => 'contraseña de la cuenta', 'twofa_url' => 'liga de 2FA', 'invite_links.*.url' => 'liga de invitación', 'invite_links.*.expires_on' => 'caducidad de la liga', 'started_on' => 'fecha de inicio', 'expires_on' => 'fecha de vencimiento', 'notes' => 'notas']);
+            // Hoy se acepta para no trabar el guardado el mismo día en que se libera (ese día ya cuenta como libre).
+            'google_bloqueo_hasta' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:'.Hoy::fecha()],
+        ], ['email.unique' => 'Esa cuenta ya está registrada.', 'google_bloqueo_hasta.after_or_equal' => 'Pon una fecha de hoy en adelante; si Google ya deja invitar, quita el bloqueo.'], ['google_bloqueo_hasta' => 'fecha en que se liberan las invitaciones', 'email' => 'correo de la cuenta', 'password' => 'contraseña de la cuenta', 'twofa_url' => 'liga de 2FA', 'invite_links.*.url' => 'liga de invitación', 'invite_links.*.expires_on' => 'caducidad de la liga', 'started_on' => 'fecha de inicio', 'expires_on' => 'fecha de vencimiento', 'notes' => 'notas']);
     }
 }

@@ -31,7 +31,11 @@ export interface Cuenta {
     /** Vigente, los 5 espacios ocupados, nadie pendiente de pago y todos dentro del grupo: va en la pestaña «Llenas». */
     llena: boolean;
     /** Sincronización con el grupo familiar de Google (solo cuentas con sesión abierta en el servidor). */
-    google: { conectada: boolean; revisada: string | null; ligas: number; extra: { email: string; tipo: 'miembro' | 'invitado' }[] };
+    google: {
+        conectada: boolean; revisada: string | null; ligas: number; extra: { email: string; tipo: 'miembro' | 'invitado' }[];
+        /** Google no deja invitar hasta este momento (ISO 8601; «límite de invitaciones»). null = sin bloqueo. */
+        bloqueo_hasta: string | null;
+    };
 }
 
 /** Reparto de un periodo: ventas − publicidad − costo de cuentas = neto; socio 10 %; el resto, mitad vendedor y mitad dueño. */
@@ -48,17 +52,20 @@ export interface DashboardProps {
     historico: Totales;
     porVendedorMes: FilaVendedor[];
     serie: DiaSerie[];
-    cuentas: { activas: number; vencidas: number; espacios_ocupados: number; espacios_libres: number; capacidad_total: number; clientes: number; pendientes_pago: number; pendiente_monto: number };
+    /** espacios_libres = los que se pueden vender hoy; espacios_bloqueados = libres en cuentas con el bloqueo de Google. */
+    cuentas: { activas: number; vencidas: number; espacios_ocupados: number; espacios_libres: number; espacios_bloqueados: number; capacidad_total: number; clientes: number; pendientes_pago: number; pendiente_monto: number };
     conEspacio: Cuenta[];
     porVencer: Cuenta[];
 }
 
 export interface CuentasProps {
     cuentas: Cuenta[];
-    filtros: { estado: 'activas' | 'llenas' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
+    filtros: { estado: 'activas' | 'llenas' | 'bloqueadas' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
     vendedores: Vendedor[];
     /** Cuántas cuentas vigentes están llenas (para la pestaña «Llenas»). */
     llenas: number;
+    /** Cuántas cuentas vigentes tienen el bloqueo de invitaciones de Google (pestaña «Bloqueadas»). */
+    bloqueadas: number;
 }
 
 export interface DiaProps {

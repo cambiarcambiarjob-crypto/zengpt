@@ -19,8 +19,13 @@ export const ResumenCuentas = memo(function ResumenCuentas({ cuentas, animar = t
     const vigentes = cuentas.filter((cuenta) => cuenta.activa);
     const vencidas = cuentas.length - vigentes.length;
     const porVencer = vigentes.filter((cuenta) => cuenta.por_vencer).length;
-    const libres = vigentes.reduce((suma, cuenta) => suma + cuenta.libres, 0);
-    const conEspacio = vigentes.filter((cuenta) => cuenta.libres > 0).length;
+    // Libres = los que se pueden vender hoy; los de cuentas con el bloqueo de invitaciones de Google van aparte.
+    const vendibles = vigentes.filter((cuenta) => !cuenta.google.bloqueo_hasta);
+    const libres = vendibles.reduce((suma, cuenta) => suma + cuenta.libres, 0);
+    const conEspacio = vendibles.filter((cuenta) => cuenta.libres > 0).length;
+    const bloqueados = vigentes.reduce((suma, cuenta) => suma + (cuenta.google.bloqueo_hasta ? cuenta.libres : 0), 0);
+    const detalleLibres =
+        bloqueados > 0 ? (libres > 0 ? `+${bloqueados} bloqueados` : plural(bloqueados, 'bloqueado')) : libres > 0 ? `en ${plural(conEspacio, 'cuenta')}` : 'nada por vender';
     const clientes = cuentas.reduce((suma, cuenta) => suma + cuenta.ocupados, 0);
     const capacidad = cuentas.reduce((suma, cuenta) => suma + cuenta.capacidad, 0);
     const ingresos = cuentas.reduce((suma, cuenta) => suma + cuenta.ingresos, 0);
@@ -31,7 +36,7 @@ export const ResumenCuentas = memo(function ResumenCuentas({ cuentas, animar = t
 
     const celdas: { clave: string; cifra: CifraProps; detalle: string }[] = [
         { clave: 'cuentas', cifra: { etiqueta: 'Cuentas', valor: cuentas.length, formato: 'numero' }, detalle: detalleCuentas },
-        { clave: 'libres', cifra: { etiqueta: 'Espacios libres', valor: libres, formato: 'numero', tono: libres > 0 ? 'acento' : 'normal' }, detalle: libres > 0 ? `en ${plural(conEspacio, 'cuenta')}` : 'nada por vender' },
+        { clave: 'libres', cifra: { etiqueta: 'Espacios libres', valor: libres, formato: 'numero', tono: libres > 0 ? 'acento' : 'normal' }, detalle: detalleLibres },
         { clave: 'clientes', cifra: { etiqueta: 'Clientes', valor: clientes, formato: 'numero' }, detalle: `de ${plural(capacidad, 'espacio')}` },
         { clave: 'ingresos', cifra: { etiqueta: 'Ingresos', valor: ingresos }, detalle: 'en total' },
     ];

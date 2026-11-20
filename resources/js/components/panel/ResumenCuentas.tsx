@@ -37,6 +37,7 @@ export function ResumenCuentas({ cuentas, className }: { cuentas: DashboardProps
 
     const datos: Dato[] = [
         { clave: 'activas', etiqueta: 'Cuentas activas', valor: cuentas.activas, href: '/cuentas?estado=activas' },
+        // Solo los que se pueden vender hoy; los bloqueados por Google se ven bajo la barra de ocupación.
         { clave: 'libres', etiqueta: 'Espacios libres', valor: cuentas.espacios_libres, href: '/cuentas?estado=con_espacio', tono: cuentas.espacios_libres > 0 ? 'acento' : undefined },
         { clave: 'clientes', etiqueta: 'Clientes totales', valor: cuentas.clientes, href: '/cuentas?estado=todas' },
         { clave: 'por_cobrar', etiqueta: `Por cobrar · ${dinero(cuentas.pendiente_monto)}`, valor: cuentas.pendientes_pago, href: '/cuentas?estado=por_cobrar', tono: cuentas.pendientes_pago > 0 ? 'alerta' : undefined },
@@ -75,7 +76,7 @@ export function ResumenCuentas({ cuentas, className }: { cuentas: DashboardProps
                     aria-valuemin={0}
                     aria-valuemax={cuentas.capacidad_total}
                     aria-valuenow={cuentas.espacios_ocupados}
-                    aria-valuetext={`${cuentas.espacios_ocupados} de ${cuentas.capacidad_total} espacios ocupados, ${cuentas.espacios_libres} libres`}
+                    aria-valuetext={`${cuentas.espacios_ocupados} de ${cuentas.capacidad_total} espacios ocupados, ${cuentas.espacios_libres} libres${cuentas.espacios_bloqueados > 0 ? ` y ${cuentas.espacios_bloqueados} bloqueados por Google` : ''}`}
                     className="mt-2.5 h-2.5 overflow-hidden rounded-full bg-acento/14"
                 >
                     <div
@@ -85,7 +86,15 @@ export function ResumenCuentas({ cuentas, className }: { cuentas: DashboardProps
                 </div>
                 <div className="mt-2 flex justify-between text-xs text-tenue">
                     <span>{plural(cuentas.espacios_ocupados, 'ocupado')}</span>
-                    <span>{plural(cuentas.espacios_libres, 'libre')}</span>
+                    <span>
+                        {plural(cuentas.espacios_libres, 'libre')}
+                        {cuentas.espacios_bloqueados > 0 && (
+                            <Link href="/cuentas?estado=bloqueadas" className="text-peligro underline-offset-2 hover:underline" title="Libres en cuentas donde Google no deja invitar por ahora">
+                                {' · '}
+                                {plural(cuentas.espacios_bloqueados, 'bloqueado')} por Google
+                            </Link>
+                        )}
+                    </span>
                 </div>
             </div>
 

@@ -28,6 +28,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/cuentas', [AccountController::class, 'store'])->name('cuentas.store');
     Route::put('/cuentas/{account}', [AccountController::class, 'update'])->name('cuentas.update');
     Route::post('/cuentas/{account}/google', [AccountController::class, 'google'])->middleware('throttle:12,1')->name('cuentas.google');
+    Route::put('/cuentas/{account}/bloqueo', [AccountController::class, 'bloqueo'])->name('cuentas.bloqueo');
     Route::delete('/cuentas/{account}', [AccountController::class, 'destroy'])->name('cuentas.destroy');
 
     Route::post('/cuentas/{account}/espacios', [SlotController::class, 'store'])->name('espacios.store');
