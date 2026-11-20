@@ -30,6 +30,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/cuentas/{account}', [AccountController::class, 'update'])->name('cuentas.update');
     Route::post('/cuentas/{account}/google', [AccountController::class, 'google'])->middleware('throttle:12,1')->name('cuentas.google');
     Route::put('/cuentas/{account}/bloqueo', [AccountController::class, 'bloqueo'])->name('cuentas.bloqueo');
+    Route::put('/cuentas/{account}/activar', [AccountController::class, 'activar'])->name('cuentas.activar');
     Route::delete('/cuentas/{account}', [AccountController::class, 'destroy'])->name('cuentas.destroy');
 
     Route::post('/cuentas/{account}/espacios', [SlotController::class, 'store'])->name('espacios.store');

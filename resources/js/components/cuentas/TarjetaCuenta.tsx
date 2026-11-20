@@ -1,4 +1,4 @@
-import { CircleCheck, Link2, Pencil, StickyNote, Trash2 } from 'lucide-react';
+import { CircleCheck, Link2, Pencil, Power, StickyNote, Trash2 } from 'lucide-react';
 import { memo } from 'react';
 import { BarraEspacios } from '@/components/ui/BarraEspacios';
 import { Boton } from '@/components/ui/Boton';
@@ -23,18 +23,21 @@ export interface TarjetaCuentaProps {
     alAgregarCliente: (cuenta: Cuenta) => void;
     alEditarCliente: (cuenta: Cuenta, espacio: Espacio) => void;
     alLiberar: (cuenta: Cuenta, espacio: Espacio) => void;
+    /** Activar una cuenta que está «por activar». */
+    alActivar: (cuenta: Cuenta) => void;
 }
 
-const BORDE = { activa: 'border-borde', por_vencer: 'border-alerta/30', vencida: 'border-peligro/25' } as const;
-const TONO_DIAS = { activa: 'text-suave', por_vencer: 'text-alerta', vencida: 'text-peligro' } as const;
+const BORDE = { activa: 'border-borde', por_vencer: 'border-alerta/30', vencida: 'border-peligro/25', por_activar: 'border-info/30 border-dashed' } as const;
+const TONO_DIAS = { activa: 'text-suave', por_vencer: 'text-alerta', vencida: 'text-peligro', por_activar: 'text-info' } as const;
 
 /**
  * Una cuenta con sus espacios: Gmail copiable, estado, vigencia, ingresos y las casillas (ocupadas o «Agregar cliente»).
  * Va memorizada: escribir en el buscador o abrir un modal no vuelve a pintar las tarjetas.
  */
-export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda, alEditar, alEliminar, alAgregarCliente, alEditarCliente, alLiberar }: TarjetaCuentaProps) {
+export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda, alEditar, alEliminar, alAgregarCliente, alEditarCliente, alLiberar, alActivar }: TarjetaCuentaProps) {
     const estado = estadoDeCuenta(cuenta);
     const vencida = estado === 'vencida';
+    const porActivar = estado === 'por_activar';
     const porPosicion = new Map(cuenta.espacios.map((espacio) => [espacio.position, espacio]));
     // Si algún espacio trae una posición fuera de 1…capacidad, igual se muestra (al final).
     const fuera = cuenta.espacios.filter((espacio) => espacio.position < 1 || espacio.position > cuenta.capacidad);
@@ -86,14 +89,27 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                             </span>
                         )}
                     </div>
-                    <p className="mt-1 text-[13px] leading-snug text-suave">
-                        {vencida ? 'Venció el ' : 'Vence el '}
-                        <time dateTime={cuenta.expires_on} className="cifras text-texto">
-                            {fechaCorta(cuenta.expires_on)}
-                        </time>
-                        <span aria-hidden="true"> · </span>
-                        <span className={cn('font-medium', TONO_DIAS[estado])}>{diasEnPalabras(dias)}</span>
-                    </p>
+                    {porActivar ? (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                            <Boton variante="primario" tamano="sm" icono={<Power className="size-3.5" aria-hidden="true" />} onClick={() => alActivar(cuenta)} aria-label={`Activar la cuenta ${cuenta.email}`}>
+                                Activar
+                            </Boton>
+                            <p className="min-w-0 flex-1 basis-56 text-[13px] leading-snug text-suave">
+                                <span className={cn('font-medium', TONO_DIAS[estado])}>Pendiente de activar</span>
+                                <span aria-hidden="true"> · </span>
+                                sus meses de vigencia empiezan a correr cuando la actives
+                            </p>
+                        </div>
+                    ) : (
+                        <p className="mt-1 text-[13px] leading-snug text-suave">
+                            {vencida ? 'Venció el ' : 'Vence el '}
+                            <time dateTime={cuenta.expires_on} className="cifras text-texto">
+                                {fechaCorta(cuenta.expires_on)}
+                            </time>
+                            <span aria-hidden="true"> · </span>
+                            <span className={cn('font-medium', TONO_DIAS[estado])}>{diasEnPalabras(dias)}</span>
+                        </p>
+                    )}
                     {(cuenta.password || cuenta.twofa_url) && (
                         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-suave">
                             {cuenta.password && (
@@ -123,7 +139,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                         </p>
                     )}
                     <GoogleCuenta cuenta={cuenta} />
-                    {!vencida && <AvisoBloqueo cuenta={cuenta} />}
+                    {!vencida && !porActivar && <AvisoBloqueo cuenta={cuenta} />}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-4 sm:gap-5">
@@ -161,10 +177,10 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                     }
 
                     // Google no deja invitar por ahora: el espacio libre va en rojo con su cuenta regresiva.
-                    return bloqueo && !vencida ? (
+                    return bloqueo && !vencida && !porActivar ? (
                         <CasillaBloqueada key={`b${indice}`} cuenta={cuenta} hasta={bloqueo} alAgregar={alAgregarCliente} />
                     ) : (
-                        <CasillaLibre key={`l${indice}`} cuenta={cuenta} disponible={!vencida} alAgregar={alAgregarCliente} />
+                        <CasillaLibre key={`l${indice}`} cuenta={cuenta} disponible={!vencida && !porActivar} alAgregar={alAgregarCliente} />
                     );
                 })}
                 {fuera.map((espacio) => (

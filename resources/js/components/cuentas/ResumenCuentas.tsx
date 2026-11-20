@@ -17,7 +17,8 @@ export interface ResumenCuentasProps {
  */
 export const ResumenCuentas = memo(function ResumenCuentas({ cuentas, animar = true, className }: ResumenCuentasProps) {
     const vigentes = cuentas.filter((cuenta) => cuenta.activa);
-    const vencidas = cuentas.length - vigentes.length;
+    const porActivar = cuentas.filter((cuenta) => cuenta.por_activar).length;
+    const vencidas = cuentas.length - vigentes.length - porActivar;
     const porVencer = vigentes.filter((cuenta) => cuenta.por_vencer).length;
     // Libres = los que se pueden vender hoy; los de cuentas con el bloqueo de invitaciones de Google van aparte.
     const vendibles = vigentes.filter((cuenta) => !cuenta.google.bloqueo_hasta);
@@ -30,7 +31,8 @@ export const ResumenCuentas = memo(function ResumenCuentas({ cuentas, animar = t
     const capacidad = cuentas.reduce((suma, cuenta) => suma + cuenta.capacidad, 0);
     const ingresos = cuentas.reduce((suma, cuenta) => suma + cuenta.ingresos, 0);
 
-    const detalleCuentas = [porVencer > 0 ? `${porVencer} por vencer` : null, vencidas > 0 ? plural(vencidas, 'vencida') : null].filter(Boolean).join(' · ') || 'al corriente';
+    const detalleCuentas =
+        [porActivar > 0 ? `${porActivar} por activar` : null, porVencer > 0 ? `${porVencer} por vencer` : null, vencidas > 0 ? plural(vencidas, 'vencida') : null].filter(Boolean).join(' · ') || 'al corriente';
 
     const sinCuentas = cuentas.length === 0;
 

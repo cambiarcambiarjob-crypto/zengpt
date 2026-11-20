@@ -20,6 +20,10 @@ class SlotController extends Controller
     {
         $data = $this->validated($request);
 
+        if ($account->por_activar) {
+            return back()->with('error', 'La cuenta está pendiente de activar: actívala para agregarle clientes.');
+        }
+
         if (! $account->isActive()) {
             return back()->with('error', 'La cuenta ya venció: no se le pueden agregar clientes.');
         }

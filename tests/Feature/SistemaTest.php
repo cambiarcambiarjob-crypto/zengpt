@@ -431,6 +431,48 @@ class SistemaTest extends TestCase
         $this->assertContains('sinprecio@gmail.com', $correos('/cuentas?estado=por_cobrar'));
     }
 
+    public function test_las_cuentas_por_activar_no_cuentan_como_activas_hasta_activarlas(): void
+    {
+        $activa = $this->cuenta(['email' => 'activa@gmail.com']);
+        $this->actingAs($this->socio)->post('/cuentas', ['email' => 'Nueva.Pendiente@gmail.com', 'password' => 'clave-de-prueba', 'started_on' => Hoy::fecha(), 'por_activar' => true])
+            ->assertSessionHas('success', 'Cuenta agregada en «Por activar».');
+        $pendiente = Account::query()->where('email', 'nueva.pendiente@gmail.com')->firstOrFail();
+        $this->assertTrue($pendiente->por_activar);
+        $this->assertFalse($pendiente->isActive());
+        // Aunque sus fechas vencieran, no es «vencida»: sigue por activar.
+        $vieja = $this->cuenta(['email' => 'vieja.pendiente@gmail.com', 'started_on' => Hoy::carbon()->subMonths(4)->toDateString(), 'expires_on' => Hoy::carbon()->subMonth()->toDateString()]);
+        $vieja->forceFill(['por_activar' => true])->save();
+
+        $correos = fn (string $url): array => collect($this->actingAs($this->socio)->get($url)->viewData('page')['props']['cuentas'])->pluck('email')->sort()->values()->all();
+        $this->assertSame(['activa@gmail.com'], $correos('/cuentas'));
+        $this->assertSame(['activa@gmail.com'], $correos('/cuentas?estado=con_espacio'));
+        $this->assertSame([], $correos('/cuentas?estado=vencidas'));
+        $this->assertSame(['nueva.pendiente@gmail.com', 'vieja.pendiente@gmail.com'], $correos('/cuentas?estado=por_activar'));
+        $this->assertCount(3, $correos('/cuentas?estado=todas'));
+        $this->actingAs($this->socio)->get('/cuentas')->assertInertia(fn (Assert $p) => $p->where('por_activar', 2));
+        $this->assertTrue(Presentar::cuenta($pendiente->load('slots'))['por_activar']);
+        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $p) => $p->where('cuentas.activas', 1)->where('cuentas.vencidas', 0)->has('conEspacio', 1));
+        $this->actingAs($this->admin)->get('/dia')->assertInertia(fn (Assert $p) => $p->has('conEspacio', 1));
+
+        // No acepta clientes mientras esté por activar.
+        $this->actingAs($this->socio)->post("/cuentas/{$pendiente->id}/espacios", ['client_email' => 'cliente@gmail.com', 'price' => 200, 'seller_id' => $this->vendedor('Jorge')->id, 'sold_on' => Hoy::fecha()])
+            ->assertSessionHas('error', 'La cuenta está pendiente de activar: actívala para agregarle clientes.');
+        $this->assertSame(0, $pendiente->slots()->count());
+
+        // Al activarla, su vigencia corre desde la fecha elegida (hoy por omisión) y ya es activa.
+        $inicio = Hoy::carbon()->subDay()->toDateString();
+        $this->actingAs($this->socio)->put("/cuentas/{$pendiente->id}/activar", ['started_on' => $inicio])->assertSessionHas('success');
+        $pendiente->refresh();
+        $this->assertFalse($pendiente->por_activar);
+        $this->assertSame([$inicio, Carbon::parse($inicio)->addMonthsNoOverflow(3)->toDateString()], [$pendiente->started_on->toDateString(), $pendiente->expires_on->toDateString()]);
+        $this->assertSame(['activa@gmail.com', 'nueva.pendiente@gmail.com'], $correos('/cuentas'));
+        $this->actingAs($this->socio)->put("/cuentas/{$pendiente->id}/activar")->assertSessionHas('error', 'Esa cuenta ya estaba activa.');
+        $this->actingAs($this->socio)->put("/cuentas/{$vieja->id}/activar", ['started_on' => Hoy::carbon()->addDays(5)->toDateString()])->assertSessionHasErrors('started_on');
+        $this->actingAs($this->socio)->put("/cuentas/{$vieja->id}/activar")->assertSessionHas('success');
+        $this->assertSame(Hoy::fecha(), $vieja->fresh()->started_on->toDateString());
+        $this->assertTrue($vieja->fresh()->isActive());
+    }
+
     public function test_cada_vendedor_tiene_su_pantalla_y_sus_pagos_semanales(): void
     {
         $cuenta = $this->cuenta();

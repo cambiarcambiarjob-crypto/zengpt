@@ -1,7 +1,8 @@
 import { router } from '@inertiajs/react';
-import { Ban, CircleCheck, Plus, SearchX } from 'lucide-react';
+import { Ban, CircleCheck, Plus, Power, SearchX } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Buscador } from '@/components/cuentas/Buscador';
+import { ModalActivar } from '@/components/cuentas/ModalActivar';
 import { ModalCuenta } from '@/components/cuentas/ModalCuenta';
 import { ModalEspacio } from '@/components/cuentas/ModalEspacio';
 import { ResumenCuentas } from '@/components/cuentas/ResumenCuentas';
@@ -28,6 +29,7 @@ const ESTADOS: { valor: EstadoFiltro; etiqueta: string }[] = [
     { valor: 'por_cobrar', etiqueta: 'Por cobrar' },
     { valor: 'llenas', etiqueta: 'Llenas' },
     { valor: 'bloqueadas', etiqueta: 'Bloqueadas' },
+    { valor: 'por_activar', etiqueta: 'Por activar' },
     { valor: 'vencidas', etiqueta: 'Vencidas' },
     { valor: 'todas', etiqueta: 'Todas' },
 ];
@@ -47,7 +49,7 @@ function recuperarFoco(cuentaId?: number): void {
 }
 
 export default function CuentasIndex() {
-    const { cuentas, filtros, vendedores, negocio, auth, llenas, bloqueadas } = usePagina<CuentasProps>();
+    const { cuentas, filtros, vendedores, negocio, auth, llenas, bloqueadas, por_activar: porActivar } = usePagina<CuentasProps>();
     const esAdmin = auth.user?.is_admin === true;
 
     // ── Búsqueda con pausa ────────────────────────────────────────────────────────────────────────────────────────
@@ -131,6 +133,7 @@ export default function CuentasIndex() {
     // Funciones estables: las tarjetas van memorizadas y no se vuelven a pintar al abrir un diálogo o teclear.
     const nuevaCuenta = useCallback(() => setDialogoCuenta({ cuenta: null }), []);
     const editarCuenta = useCallback((cuenta: Cuenta) => setDialogoCuenta({ cuenta }), []);
+    const [porActivarDialogo, setPorActivarDialogo] = useState<Cuenta | null>(null);
     const cerrarCuenta = useCallback(() => setDialogoCuenta(null), []);
     const agregarCliente = useCallback((cuenta: Cuenta) => setDialogoEspacio({ cuenta, espacio: null }), []);
     const editarCliente = useCallback((cuenta: Cuenta, espacio: Espacio) => setDialogoEspacio({ cuenta, espacio }), []);
@@ -215,11 +218,13 @@ export default function CuentasIndex() {
     // «Bloqueadas» (invitaciones bloqueadas por Google) solo aparece cuando hay alguna, o si ya estás en ella.
     const opcionesEstado = useMemo(
         () =>
-            ESTADOS.filter((opcion) => opcion.valor !== 'bloqueadas' || bloqueadas > 0 || filtros.estado === 'bloqueadas').map((opcion) => {
-                const cuantas = opcion.valor === 'llenas' ? llenas : opcion.valor === 'bloqueadas' ? bloqueadas : 0;
+            ESTADOS.filter(
+                (opcion) => (opcion.valor !== 'bloqueadas' || bloqueadas > 0 || filtros.estado === 'bloqueadas') && (opcion.valor !== 'por_activar' || porActivar > 0 || filtros.estado === 'por_activar'),
+            ).map((opcion) => {
+                const cuantas = opcion.valor === 'llenas' ? llenas : opcion.valor === 'bloqueadas' ? bloqueadas : opcion.valor === 'por_activar' ? porActivar : 0;
                 return { ...opcion, etiqueta: cuantas > 0 ? `${opcion.etiqueta} · ${cuantas}` : opcion.etiqueta, href: urlCuentas(opcion.valor, qLimpia) };
             }),
-        [qLimpia, llenas, bloqueadas, filtros.estado],
+        [qLimpia, llenas, bloqueadas, porActivar, filtros.estado],
     );
     const busquedaAplicada = useMemo(() => filtros.q.toLowerCase(), [filtros.q]);
 
@@ -240,6 +245,8 @@ export default function CuentasIndex() {
         descripcion = total === 0 ? 'Nadie pendiente de pago' : `${plural(total, 'cuenta')} con clientes pendientes de pago`;
     } else if (filtros.estado === 'llenas') {
         descripcion = total === 0 ? 'Ninguna cuenta llena todavía' : `${plural(total, 'cuenta llena', 'cuentas llenas')}: ${negocio.capacidad} de ${negocio.capacidad}, todos pagados y dentro del grupo`;
+    } else if (filtros.estado === 'por_activar') {
+        descripcion = total === 0 ? 'Ninguna cuenta pendiente de activar' : `${plural(total, 'cuenta pendiente', 'cuentas pendientes')} de activar · no cuentan como activas hasta que las actives`;
     } else if (filtros.estado === 'bloqueadas') {
         descripcion =
             total === 0
@@ -251,6 +258,7 @@ export default function CuentasIndex() {
         descripcion = total === 0 ? 'Ninguna cuenta activa' : `${plural(total, 'cuenta activa', 'cuentas activas')} · ${textoLibres}`;
         if (libresBloqueados > 0) descripcion += ` · ${plural(libresBloqueados, 'bloqueado', 'bloqueados')} por Google`;
         if (llenas > 0) descripcion += ` · ${plural(llenas, 'llena', 'llenas')} aparte`;
+        if (porActivar > 0) descripcion += ` · ${porActivar} por activar`;
     }
 
     return (
@@ -298,6 +306,7 @@ export default function CuentasIndex() {
                                 alAgregarCliente={agregarCliente}
                                 alEditarCliente={editarCliente}
                                 alLiberar={pedirLiberar}
+                                alActivar={setPorActivarDialogo}
                             />
                         </Aparecer>
                     ))}
@@ -332,6 +341,14 @@ export default function CuentasIndex() {
                         icono={<CircleCheck className="size-5" />}
                         titulo="Ninguna cuenta llena todavía"
                         descripcion={`Cuando una cuenta tenga sus ${plural(negocio.capacidad, 'espacio')} ocupados, todos pagados y dentro del grupo, se pasa sola aquí para no ocupar lugar en «Activas».`}
+                    />
+                </Tarjeta>
+            ) : filtros.estado === 'por_activar' ? (
+                <Tarjeta className="animate-entrada">
+                    <EstadoVacio
+                        icono={<Power className="size-5" />}
+                        titulo="Ninguna cuenta pendiente de activar"
+                        descripcion="Al agregar una cuenta que todavía no vas a usar, marca «Pendiente de activar»: queda aquí y no cuenta como activa hasta que la actives."
                     />
                 </Tarjeta>
             ) : filtros.estado === 'bloqueadas' ? (
@@ -380,6 +397,8 @@ export default function CuentasIndex() {
             )}
 
             {dialogoCuenta && <ModalCuenta cuenta={dialogoCuenta.cuenta} alCerrar={cerrarCuenta} />}
+
+            {porActivarDialogo && <ModalActivar cuenta={porActivarDialogo} alCerrar={() => setPorActivarDialogo(null)} />}
 
             {dialogoEspacio && (
                 <ModalEspacio cuenta={dialogoEspacio.cuenta} espacio={dialogoEspacio.espacio} vendedores={vendedores} alCerrar={cerrarEspacio} alGuardar={alGuardarCliente} alLiberar={pedirLiberar} />

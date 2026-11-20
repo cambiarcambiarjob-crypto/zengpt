@@ -25,6 +25,8 @@ final class Presentar
             'expires_on' => $account->expires_on->toDateString(),
             'dias_restantes' => $account->daysLeft(),
             'activa' => $account->isActive(),
+            // Comprada pero sin usar: no es activa ni vencida hasta que alguien la activa.
+            'por_activar' => (bool) $account->por_activar,
             'por_vencer' => $account->isActive() && $account->daysLeft() <= (int) config('zengpt.dias_aviso', 14),
             'notes' => $account->notes,
             'capacidad' => Account::capacity(),

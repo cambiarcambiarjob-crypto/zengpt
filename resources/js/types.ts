@@ -27,6 +27,8 @@ export interface Cuenta {
     id: number; email: string; password: string | null; twofa_url: string | null;
     invite_links: { position: number; url: string | null; expires_on: string | null }[]; started_on: string; expires_on: string; dias_restantes: number;
     activa: boolean; por_vencer: boolean; notes: string | null;
+    /** Comprada pero sin usar todavía: no cuenta como activa (ni vencida) hasta que se activa. */
+    por_activar: boolean;
     capacidad: number; ocupados: number; libres: number; ingresos: number; espacios: Espacio[];
     /** Clientes que deben dinero: sin pagar y con precio (los «Sin precio» no cuentan). */
     pendientes_pago: number;
@@ -62,12 +64,14 @@ export interface DashboardProps {
 
 export interface CuentasProps {
     cuentas: Cuenta[];
-    filtros: { estado: 'activas' | 'llenas' | 'bloqueadas' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
+    filtros: { estado: 'activas' | 'llenas' | 'bloqueadas' | 'por_activar' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
     vendedores: Vendedor[];
     /** Cuántas cuentas vigentes están llenas (para la pestaña «Llenas»). */
     llenas: number;
     /** Cuántas cuentas vigentes tienen el bloqueo de invitaciones de Google (pestaña «Bloqueadas»). */
     bloqueadas: number;
+    /** Cuántas cuentas están pendientes de activar (pestaña «Por activar»). */
+    por_activar: number;
 }
 
 export interface DiaProps {

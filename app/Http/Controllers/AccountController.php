@@ -19,7 +19,7 @@ class AccountController extends Controller
 {
     public function index(Request $request): Response
     {
-        $estado = in_array($request->query('estado'), ['activas', 'llenas', 'bloqueadas', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
+        $estado = in_array($request->query('estado'), ['activas', 'llenas', 'bloqueadas', 'por_activar', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
         $q = trim((string) $request->query('q'));
 
         $cuentas = Account::query()
@@ -27,6 +27,7 @@ class AccountController extends Controller
             ->when(in_array($estado, ['activas', 'llenas', 'bloqueadas', 'con_espacio'], true), fn ($query) => $query->active())
             ->when($estado === 'bloqueadas', fn ($query) => $query->where('google_bloqueo_hasta', '>', now()))
             ->when($estado === 'vencidas', fn ($query) => $query->expired())
+            ->when($estado === 'por_activar', fn ($query) => $query->porActivar())
             ->when($estado === 'por_cobrar', fn ($query) => $query->whereHas('slots', fn ($s) => $s->porCobrar()))
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
                 ->where('email', 'like', "%{$q}%")
@@ -48,6 +49,7 @@ class AccountController extends Controller
             'filtros' => ['estado' => $estado, 'q' => $q],
             'llenas' => $llenas,
             'bloqueadas' => Account::query()->active()->where('google_bloqueo_hasta', '>', now())->count(),
+            'por_activar' => Account::query()->porActivar()->count(),
             'vendedores' => Seller::query()->where('active', true)->ordered()->get(['id', 'name', 'is_owner']),
         ]);
     }
@@ -66,10 +68,27 @@ class AccountController extends Controller
             'expires_on' => $inicio->copy()->addMonthsNoOverflow((int) config('zengpt.meses_cuenta'))->toDateString(),
             'notes' => $data['notes'] ?? null,
             'created_by' => $request->user()->id,
+            'por_activar' => $request->boolean('por_activar'),
         ]);
         $cuenta->syncInviteLinks();
 
-        return back()->with('success', 'Cuenta agregada.');
+        return back()->with('success', $cuenta->por_activar ? 'Cuenta agregada en «Por activar».' : 'Cuenta agregada.');
+    }
+
+    /** Activa una cuenta que estaba «por activar»: su vigencia corre desde la fecha de inicio elegida (hoy por omisión). */
+    public function activar(Request $request, Account $account): RedirectResponse
+    {
+        if (! $account->por_activar) {
+            return back()->with('error', 'Esa cuenta ya estaba activa.');
+        }
+
+        $data = $request->validate([
+            'started_on' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.Hoy::carbon()->addDay()->toDateString()],
+        ], [], ['started_on' => 'fecha de inicio']);
+
+        $account->activar($data['started_on'] ?? Hoy::fecha());
+
+        return back()->with('success', "{$account->email} activada: vence el ".$account->expires_on->locale('es')->isoFormat('D [de] MMMM [de] YYYY').'.');
     }
 
     public function update(Request $request, Account $account): RedirectResponse

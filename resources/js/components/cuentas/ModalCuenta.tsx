@@ -31,6 +31,7 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
     const puedeFijar = editando && esAdmin;
     const idFijar = useId();
     const idBloqueo = useId();
+    const idPorActivar = useId();
     const bloqueoActual = cuenta?.google.bloqueo_hasta ?? null;
     const restanteBloqueo = useRestante(bloqueoActual);
 
@@ -45,6 +46,8 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
         started_on: cuenta?.started_on ?? negocio.hoy,
         expires_on: puedeFijar && fijadaDeOrigen ? cuenta.expires_on : '',
         notes: cuenta?.notes ?? '',
+        // Cuenta nueva que todavía no se va a usar: queda en «Por activar».
+        por_activar: false,
         // Bloqueo de invitaciones de Google: el día en que se liberan (desde las 0:00 de ese día).
         bloqueo: bloqueoActual !== null,
         google_bloqueo_hasta: bloqueoActual ? diaDelNegocio(bloqueoActual) : sumarDias(negocio.hoy, 7),
@@ -72,7 +75,7 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
             notes: datos.notes.trim(),
             invite_links: Object.fromEntries(datos.invite_links.map((l, i) => [String(i + 1), { url: l.url.trim(), expires_on: l.expires_on }])),
             ...(puedeFijar ? { expires_on: fijar ? datos.expires_on : '' } : {}),
-            ...(editando ? { google_bloqueo_hasta: datos.bloqueo ? datos.google_bloqueo_hasta : '' } : {}),
+            ...(editando ? { google_bloqueo_hasta: datos.bloqueo ? datos.google_bloqueo_hasta : '' } : { por_activar: datos.por_activar }),
         }));
 
         const opciones = {
@@ -221,6 +224,27 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
                                 error={form.errors.expires_on}
                             />
                         )}
+                    </div>
+                )}
+
+                {!editando && (
+                    <div className="flex items-start gap-2.5 rounded-campo border border-borde p-3">
+                        <input
+                            id={idPorActivar}
+                            type="checkbox"
+                            aria-describedby={`${idPorActivar}-ayuda`}
+                            className="mt-0.5 size-4 shrink-0 cursor-pointer accent-acento"
+                            checked={form.data.por_activar}
+                            onChange={(evento) => form.setData('por_activar', evento.target.checked)}
+                        />
+                        <div className="min-w-0">
+                            <label htmlFor={idPorActivar} className="cursor-pointer text-sm text-texto">
+                                Pendiente de activar
+                            </label>
+                            <p id={`${idPorActivar}-ayuda`} className="text-[13px] leading-snug text-tenue">
+                                Todavía no se va a usar: queda en «Por activar» y no cuenta como activa hasta que la actives (ahí eliges desde qué día corre su vigencia).
+                            </p>
+                        </div>
                     </div>
                 )}
 

@@ -7,6 +7,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * Una cuenta es un Gmail con vigencia de 3 meses y 5 espacios para clientes.
@@ -15,11 +16,11 @@ class Account extends Model
 {
     protected $hidden = ['password'];
 
-    protected $fillable = ['email', 'password', 'twofa_url', 'invite_links', 'started_on', 'expires_on', 'notes', 'created_by'];
+    protected $fillable = ['email', 'password', 'twofa_url', 'invite_links', 'started_on', 'expires_on', 'notes', 'created_by', 'por_activar'];
 
     protected function casts(): array
     {
-        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array', 'google_extra' => 'array', 'google_conectada' => 'boolean', 'google_ligas' => 'integer', 'google_synced_at' => 'datetime', 'google_bloqueo_hasta' => 'datetime'];
+        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array', 'google_extra' => 'array', 'google_conectada' => 'boolean', 'google_ligas' => 'integer', 'google_synced_at' => 'datetime', 'google_bloqueo_hasta' => 'datetime', 'por_activar' => 'boolean'];
     }
 
     public function setEmailAttribute(string $value): void
@@ -32,20 +33,40 @@ class Account extends Model
         return $this->hasMany(Slot::class)->orderBy('position');
     }
 
-    /** Vigente hoy (el día de vencimiento todavía cuenta). */
+    /** Vigente hoy (el día de vencimiento todavía cuenta) y ya activada. */
     public function scopeActive(Builder $query): Builder
     {
-        return $query->whereDate('expires_on', '>=', Hoy::fecha());
+        return $query->where('por_activar', false)->whereDate('expires_on', '>=', Hoy::fecha());
     }
 
     public function scopeExpired(Builder $query): Builder
     {
-        return $query->whereDate('expires_on', '<', Hoy::fecha());
+        return $query->where('por_activar', false)->whereDate('expires_on', '<', Hoy::fecha());
+    }
+
+    /** Compradas pero sin usar todavía: no cuentan como activas hasta que se activan. */
+    public function scopePorActivar(Builder $query): Builder
+    {
+        return $query->where('por_activar', true);
     }
 
     public function isActive(): bool
     {
-        return $this->expires_on->toDateString() >= Hoy::fecha();
+        return ! $this->por_activar && $this->expires_on->toDateString() >= Hoy::fecha();
+    }
+
+    /**
+     * La activa: empieza a correr su vigencia desde `inicio` (los meses de config('zengpt.meses_cuenta')).
+     */
+    public function activar(string $inicio): void
+    {
+        $desde = Carbon::parse($inicio);
+
+        $this->forceFill([
+            'por_activar' => false,
+            'started_on' => $desde->toDateString(),
+            'expires_on' => $desde->copy()->addMonthsNoOverflow((int) config('zengpt.meses_cuenta'))->toDateString(),
+        ])->save();
     }
 
     /**
