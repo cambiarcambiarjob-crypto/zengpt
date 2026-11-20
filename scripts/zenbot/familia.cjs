@@ -107,6 +107,7 @@ async function verificarIdentidad(pagina) {
 
 const perfilDe = (correo) => path.join(PERFILES, correo.replace(/[^a-z0-9@._-]/g, '_'));
 const vivo = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Pantallas ocupadas: {N: {correo, pid, visor, desde}}. Las que ya no tienen su Chrome vivo se descartan. */
 function leerEstado() {
@@ -319,7 +320,7 @@ async function sacar(pagina, correo) {
     try {
         ({ navegador, pantalla, visor: enVisor } = await chromeDe(ESPERADO, accion === 'abrir', accion === 'abrir' && objetivo === 'forzar'));
     } catch (e) {
-        return salir({ ok: false, error: e.codigo || 'sin_navegador', ocupadas: e.ocupadas || null }, 1);
+        return salir({ ok: false, error: e.codigo || 'sin_navegador', ocupadas: e.ocupadas || null, detalle: e.codigo ? e.detalle || null : String(e.message || e).slice(0, 200) }, 1);
     }
     conexion = navegador;
     // Si nadie tiene abierto el visor de esta cuenta, el Chrome se cierra al terminar.
