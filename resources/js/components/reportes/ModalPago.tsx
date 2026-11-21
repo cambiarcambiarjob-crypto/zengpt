@@ -5,11 +5,14 @@ import { Campo, CampoArea } from '@/components/ui/Campo';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
 import { aNumeroPesos, dinero, fechaCorta, fechaMedia, pesos, sumarDias } from '@/lib/formato';
-import type { Compartido, VendedorReporteProps } from '@/types';
+import type { Compartido, EstadoPagoConCortes } from '@/types';
 
 export interface ModalPagoProps {
-    vendedor: VendedorReporteProps['vendedor'];
-    pago: NonNullable<VendedorReporteProps['pago']>;
+    /** A quién se le paga (el socio o un vendedor). */
+    nombre: string;
+    /** POST que registra el pago. */
+    url: string;
+    pago: EstadoPagoConCortes;
     hoy: string;
     alCerrar: () => void;
 }
@@ -18,7 +21,7 @@ export interface ModalPagoProps {
  * Registrar un pago: «le pagué lo acumulado hasta el día X». El monto se llena solo con lo que se le debe hasta ese día
  * (su parte acumulada menos lo ya pagado); si le pagas otra cantidad, la diferencia queda para el siguiente pago.
  */
-export function ModalPago({ vendedor, pago, hoy, alCerrar }: ModalPagoProps) {
+export function ModalPago({ nombre, url, pago, hoy, alCerrar }: ModalPagoProps) {
     // Lo que se le debería si se le paga hasta `fecha`: el corte más reciente que no pase de esa fecha.
     const estimado = (fecha: string): number => {
         const cortes = pago.cortes.filter((corte) => corte.fecha <= fecha);
@@ -37,7 +40,7 @@ export function ModalPago({ vendedor, pago, hoy, alCerrar }: ModalPagoProps) {
     const enviar = (evento: FormEvent) => {
         evento.preventDefault();
         form.transform((datos) => ({ ...datos, monto: datos.monto.replace(/[$,\s]/g, ''), notes: datos.notes.trim() }));
-        form.post(`/reportes/vendedores/${vendedor.id}/pagos`, {
+        form.post(url, {
             preserveScroll: true,
             preserveState: true,
             onSuccess: (pagina) => {
@@ -50,8 +53,8 @@ export function ModalPago({ vendedor, pago, hoy, alCerrar }: ModalPagoProps) {
         <Modal
             abierto
             alCerrar={alCerrar}
-            titulo={`Pago a ${vendedor.name}`}
-            descripcion={pago.ultimo ? `El último pago cubrió hasta el ${fechaMedia(pago.ultimo.hasta)}.` : 'Primer pago: cubre todo lo que ha vendido hasta el día que elijas.'}
+            titulo={`Pago a ${nombre}`}
+            descripcion={pago.ultimo ? `El último pago cubrió hasta el ${fechaMedia(pago.ultimo.hasta)}.` : 'Primer pago: cubre todo lo acumulado hasta el día que elijas.'}
             alEnviar={enviar}
             bloqueado={form.processing}
             pie={

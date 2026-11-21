@@ -293,7 +293,7 @@ export default function ReporteVendedor() {
                 )}
             </div>
 
-            {pagando && pago && <ModalPago vendedor={vendedor} pago={pago} hoy={hoy} alCerrar={() => setPagando(false)} />}
+            {pagando && pago && <ModalPago nombre={vendedor.name} url={`${base}/pagos`} pago={pago} hoy={hoy} alCerrar={() => setPagando(false)} />}
 
             <Confirmar abierto={porDeshacer !== null} titulo="¿Deshacer este pago?" textoConfirmar="Deshacer pago" cargando={deshaciendo} alCancelar={() => setPorDeshacer(null)} alConfirmar={deshacer}>
                 {porDeshacer && (

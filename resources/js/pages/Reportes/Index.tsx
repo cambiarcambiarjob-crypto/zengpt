@@ -6,7 +6,6 @@ import { DatosPeriodo } from '@/components/reportes/DatosPeriodo';
 import { DetalleReporte } from '@/components/reportes/DetalleReporte';
 import { FiltroPeriodo } from '@/components/reportes/FiltroPeriodo';
 import { GraficaDias } from '@/components/reportes/GraficaDias';
-import { PagosVendedores } from '@/components/reportes/PagosVendedores';
 import { atajosDePeriodo, capitalizar, diasDelRango, periodoEnPalabras } from '@/components/reportes/periodos';
 import { RankingVendedores } from '@/components/reportes/RankingVendedores';
 import { ResumenPeriodo } from '@/components/reportes/ResumenPeriodo';
@@ -26,7 +25,7 @@ import type { ReportesProps } from '@/types';
  * más (el ranking), cómo se movieron los días (la gráfica) y el detalle con totales, que se puede exportar a CSV.
  */
 export default function ReportesIndex() {
-    const { desde, hasta, filas, totales, serie, pagos, negocio, auth } = usePagina<ReportesProps>();
+    const { desde, hasta, filas, totales, serie, negocio, auth } = usePagina<ReportesProps>();
     const { url } = usePage();
     const [cargando, setCargando] = useState(false);
 
@@ -81,11 +80,6 @@ export default function ReportesIndex() {
             <div className={cn('mt-4 grid grid-cols-1 gap-4 transition-opacity duration-200 xl:grid-cols-12', cargando && 'opacity-60')} aria-busy={cargando || undefined}>
                 <Aparecer indice={0} className="xl:col-span-12">
                     <ResumenPeriodo totales={totales} dias={dias} dueno={capitalizar(dueno)} esAdmin={esAdmin} porcentajeSocio={negocio.porcentaje_socio} />
-                </Aparecer>
-
-                {/* Lo que se le debe hoy a cada vendedor: no depende del periodo elegido. */}
-                <Aparecer indice={1} className="xl:col-span-12">
-                    <PagosVendedores pagos={pagos} hoy={negocio.hoy} />
                 </Aparecer>
 
                 {sinMovimiento ? (

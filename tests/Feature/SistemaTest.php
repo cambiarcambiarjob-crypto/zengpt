@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Mail\InvitacionGrupo;
 use App\Models\Account;
 use App\Models\AdSpend;
+use App\Models\PartnerPayout;
 use App\Models\Seller;
 use App\Models\Slot;
 use App\Models\User;
 use App\Services\GrupoGoogle;
+use App\Services\Resumen;
 use App\Support\Hoy;
 use App\Support\Presentar;
 use Database\Seeders\DatabaseSeeder;
@@ -549,9 +551,12 @@ class SistemaTest extends TestCase
 
         // Pago parcial: lo que falta queda para el siguiente.
         $this->actingAs($this->admin)->post("/reportes/vendedores/{$jorge->id}/pagos", ['hasta' => Hoy::fecha(), 'monto' => 200])->assertSessionHas('success');
-        $this->actingAs($this->admin)->get('/reportes')->assertInertia(fn (Assert $p) => $p
-            ->has('pagos', 3)->where('pagos.0.name', 'Jorge')->where('pagos.0.pendiente', 4894)->where('pagos.0.ultimo.amount_cents', 20000)
-            ->missing('pagos.0.cortes'));
+        $this->actingAs($this->admin)->get('/corte')->assertInertia(fn (Assert $p) => $p
+            ->component('Corte/Index')->where('beneficiarios.0.clave', 'socio')
+            ->where('beneficiarios.1.nombre', 'Jorge')->where('beneficiarios.1.pago.pendiente', 4894)->where('beneficiarios.1.pago.ultimo.amount_cents', 20000)
+            ->where('beneficiarios.1.pagar_url', "/reportes/vendedores/{$jorge->id}/pagos")
+            ->where('beneficiarios.1.deshacer_url', '/pagos-vendedores/'.$jorge->payouts()->reorder('hasta', 'desc')->value('id'))
+            ->has('movimientos', 2)->where('movimientos.0.para', 'Jorge'));
 
         // Solo se deshace el último pago.
         [$primero, $segundo] = $jorge->payouts()->get()->all();
@@ -564,6 +569,79 @@ class SistemaTest extends TestCase
         $this->actingAs($this->admin)->get("/reportes/vendedores/{$leo->id}")->assertInertia(fn (Assert $p) => $p->where('pago', null)->where('puedePagar', false)->has('pagos', 0));
         $this->actingAs($this->admin)->post("/reportes/vendedores/{$leo->id}/pagos", ['hasta' => Hoy::fecha()])->assertSessionHas('error');
         $this->assertSame(0, $leo->payouts()->count());
+    }
+
+    public function test_el_corte_lleva_lo_pagado_y_lo_que_se_le_debe_al_socio(): void
+    {
+        $cuenta = $this->cuenta();
+        $jorge = $this->vendedor('Jorge');
+        $leo = $this->vendedor('Leo');
+        $diaA = Hoy::carbon()->subDays(8)->toDateString();
+        $diaB = Hoy::carbon()->subDays(3)->toDateString();
+        $venta = function (int $pos, Seller $quien, int $precio, string $pagado) use ($cuenta): void {
+            Slot::query()->create(['account_id' => $cuenta->id, 'position' => $pos, 'client_email' => "s{$pos}@gmail.com", 'price_cents' => $precio, 'seller_id' => $quien->id, 'sold_on' => $pagado, 'paid_on' => $pagado]);
+        };
+        // El socio cobra su porcentaje de TODAS las ventas, también las del dueño.
+        $venta(1, $jorge, 20000, $diaA);
+        $venta(2, $leo, 40000, $diaA);
+        AdSpend::query()->create(['spent_on' => $diaA, 'seller_id' => $jorge->id, 'amount_cents' => 5000]);
+        $venta(3, $jorge, 50000, $diaB);
+
+        // Lo mismo que dice Reportes para cada tramo.
+        $socioHasta = fn (string $hasta): int => Resumen::totales('2000-01-01', $hasta)['socio'];
+        $hastaA = $socioHasta($diaA);
+        $total = $socioHasta(Hoy::fecha());
+        $this->assertGreaterThan(0, $hastaA);
+        $this->assertGreaterThan($hastaA, $total);
+
+        $corte = fn (User $u) => $this->actingAs($u)->get('/corte');
+        $corte($this->socio)->assertOk()->assertInertia(fn (Assert $p) => $p
+            ->component('Corte/Index')->where('puedePagar', false)
+            ->where('beneficiarios.0.clave', 'socio')->where('beneficiarios.0.nombre', $this->socio->name)
+            ->where('beneficiarios.0.pago.pendiente', $total)->where('beneficiarios.0.pago.desde', $diaA)->where('beneficiarios.0.pago.ultimo', null)
+            ->where('beneficiarios.0.pago.cortes', [['fecha' => $diaA, 'por_pagar' => $hastaA], ['fecha' => $diaB, 'por_pagar' => $total]])
+            ->where('beneficiarios.0.deshacer_url', null)
+            // Al dueño no se le paga: no aparece en el corte.
+            ->where('beneficiarios', fn ($b) => collect($b)->doesntContain('nombre', 'Leo'))
+            ->has('movimientos', 0));
+
+        // Solo el administrador registra pagos al socio.
+        $this->actingAs($this->socio)->post('/corte/socio/pagos', ['hasta' => $diaA])->assertForbidden();
+
+        // Sin monto: exactamente lo que se le debe hasta ese día.
+        $this->actingAs($this->admin)->from('/corte')->post('/corte/socio/pagos', ['hasta' => $diaA, 'notes' => 'Transferencia'])->assertRedirect('/corte')->assertSessionHas('success');
+        $primero = PartnerPayout::query()->sole();
+        $this->assertSame($hastaA, $primero->amount_cents);
+        $this->assertSame(Hoy::fecha(), $primero->paid_on->toDateString());
+        $corte($this->admin)->assertInertia(fn (Assert $p) => $p
+            ->where('puedePagar', true)
+            ->where('beneficiarios.0.pago.pendiente', $total - $hastaA)->where('beneficiarios.0.pago.desde', Carbon::parse($diaA)->addDay()->toDateString())
+            ->where('beneficiarios.0.pago.ajuste', 0)->where('beneficiarios.0.pago.ultimo.amount_cents', $hastaA)
+            ->where('beneficiarios.0.deshacer_url', "/corte/socio/pagos/{$primero->id}")
+            ->has('movimientos', 1)->where('movimientos.0.para', $this->socio->name)->where('movimientos.0.notes', 'Transferencia')->where('movimientos.0.desde', null));
+
+        // No se paga dos veces el mismo tramo ni días que no han pasado.
+        $this->actingAs($this->admin)->post('/corte/socio/pagos', ['hasta' => $diaA])->assertSessionHasErrors('hasta');
+        $this->actingAs($this->admin)->post('/corte/socio/pagos', ['hasta' => Hoy::carbon()->addDay()->toDateString()])->assertSessionHasErrors('hasta');
+
+        // Una venta capturada tarde en un día ya pagado se arrastra como ajuste.
+        $venta(4, $leo, 20000, $diaA);
+        $ajuste = $socioHasta($diaA) - $hastaA;
+        $total = $socioHasta(Hoy::fecha());
+        $this->assertGreaterThan(0, $ajuste);
+        $corte($this->admin)->assertInertia(fn (Assert $p) => $p->where('beneficiarios.0.pago.ajuste', $ajuste)->where('beneficiarios.0.pago.pendiente', $total - $hastaA));
+
+        // Pago parcial: lo que falta queda para el siguiente.
+        $this->actingAs($this->admin)->post('/corte/socio/pagos', ['hasta' => Hoy::fecha(), 'monto' => 10])->assertSessionHas('success');
+        $corte($this->admin)->assertInertia(fn (Assert $p) => $p->where('beneficiarios.0.pago.pendiente', $total - $hastaA - 1000)->has('movimientos', 2)->where('movimientos.0.puede_borrar', true));
+
+        // Solo se deshace el último, y solo el administrador.
+        $segundo = PartnerPayout::query()->orderByDesc('hasta')->first();
+        $this->actingAs($this->admin)->delete("/corte/socio/pagos/{$primero->id}")->assertSessionHas('error');
+        $this->actingAs($this->socio)->delete("/corte/socio/pagos/{$segundo->id}")->assertForbidden();
+        $this->actingAs($this->admin)->delete("/corte/socio/pagos/{$segundo->id}")->assertSessionHas('success');
+        $this->assertSame(1, PartnerPayout::query()->count());
+        $corte($this->admin)->assertInertia(fn (Assert $p) => $p->where('beneficiarios.0.pago.pendiente', $total - $hastaA));
     }
 
     public function test_el_limite_de_invitaciones_de_google_bloquea_los_espacios_libres_con_cuenta_regresiva(): void

@@ -96,11 +96,10 @@ export interface EstadoPago {
     ultimo: { hasta: string; paid_on: string; amount_cents: number } | null;
 }
 
-export interface ReportesProps {
-    desde: string; hasta: string; filas: FilaVendedor[]; totales: Totales; serie: DiaSerie[];
-    /** Por pagar a cada vendedor (sin el dueño). */
-    pagos: (EstadoPago & { seller_id: number; name: string; active: boolean })[];
-}
+/** El estado de pago más los cortes: cuánto se le debería si se le paga hasta cada día con movimiento sin pagar. */
+export interface EstadoPagoConCortes extends EstadoPago { cortes: { fecha: string; por_pagar: number }[] }
+
+export interface ReportesProps { desde: string; hasta: string; filas: FilaVendedor[]; totales: Totales; serie: DiaSerie[] }
 
 /** Reparto de un vendedor más `parte`: lo que le toca a él (al dueño, la parte del dueño). */
 export interface RepartoVendedor extends Totales { parte: number }
@@ -129,9 +128,33 @@ export interface VendedorReporteProps {
     /** Días del periodo con movimiento. */
     dias: DiaVendedor[];
     /** null para el dueño (a él no se le registran pagos). `cortes`: cuánto se le debería si se le paga hasta cada día sin pagar. */
-    pago: (EstadoPago & { cortes: { fecha: string; por_pagar: number }[] }) | null;
+    pago: EstadoPagoConCortes | null;
     pagos: PagoVendedor[];
     /** Administrador y no es el dueño. */
+    puedePagar: boolean;
+}
+
+/** A quién se le paga en el corte: el socio y cada vendedor (al dueño no). */
+export interface BeneficiarioCorte {
+    clave: string;
+    nombre: string;
+    /** «Socio · 10 % del neto de todas las ventas», «Vendedor · 50 % de lo que queda de sus ventas». */
+    rol: string;
+    pago: EstadoPagoConCortes;
+    /** POST para registrar un pago (solo el administrador). */
+    pagar_url: string;
+    /** DELETE del último pago, o null si no tiene pagos. */
+    deshacer_url: string | null;
+    /** Su pantalla de métricas (solo vendedores). */
+    detalle_url: string | null;
+}
+
+export interface MovimientoCorte extends PagoVendedor { para: string; clave: string }
+
+export interface CorteProps {
+    beneficiarios: BeneficiarioCorte[];
+    /** Pagos registrados a todos, del más reciente al más viejo (los últimos 60). */
+    movimientos: MovimientoCorte[];
     puedePagar: boolean;
 }
 

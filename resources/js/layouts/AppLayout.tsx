@@ -1,5 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { CalendarDays, ChartColumn, CircleUserRound, Ellipsis, Layers, LayoutDashboard, LogOut, Users, type LucideIcon } from 'lucide-react';
+import { CalendarDays, ChartColumn, CircleUserRound, Ellipsis, Layers, LayoutDashboard, LogOut, Users, Wallet, type LucideIcon } from 'lucide-react';
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { useSerpiente } from '@/components/easter/useSerpiente';
 import ClickSpark from '@/components/reactbits/ClickSpark';
@@ -32,6 +32,7 @@ const DESTINOS: Destino[] = [
     { href: '/cuentas', etiqueta: 'Cuentas', icono: Layers },
     { href: '/dia', etiqueta: 'Día', icono: CalendarDays },
     { href: '/reportes', etiqueta: 'Reportes', icono: ChartColumn },
+    { href: '/corte', etiqueta: 'Corte', icono: Wallet },
     { href: '/vendedores', etiqueta: 'Vendedores', icono: Users, soloAdmin: true, secundario: true },
     { href: '/perfil', etiqueta: 'Perfil', icono: CircleUserRound, secundario: true },
 ];
@@ -204,7 +205,7 @@ export default function AppLayout({ titulo, descripcion, acciones, ancho = 'norm
 
             {/* Barra inferior · celular y tableta */}
             <nav className="fixed inset-x-0 bottom-0 z-[1] border-t border-borde bg-superficie/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden" aria-label="Principal">
-                <ul className="mx-auto grid max-w-xl grid-cols-5">
+                <ul className={cn('mx-auto grid max-w-xl', principales.length >= 5 ? 'grid-cols-6' : 'grid-cols-5')}>
                     {principales.map((destino) => {
                         const activo = estaActivo(destino, ruta);
                         const Icono = destino.icono;

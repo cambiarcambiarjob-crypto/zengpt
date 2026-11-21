@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CorteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DayController;
 use App\Http\Controllers\ProfileController;
@@ -52,6 +53,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/reportes/vendedores/{seller}', [VendedorReporteController::class, 'show'])->name('reportes.vendedor');
     Route::post('/reportes/vendedores/{seller}/pagos', [VendedorReporteController::class, 'pagar'])->middleware('admin')->name('reportes.vendedor.pagar');
     Route::delete('/pagos-vendedores/{pago}', [VendedorReporteController::class, 'deshacer'])->middleware('admin')->name('reportes.vendedor.deshacer');
+
+    // Corte: lo que se le debe a cada quien (socio y vendedores) y lo pagado. Pagar es del administrador.
+    Route::get('/corte', [CorteController::class, 'index'])->name('corte.index');
+    Route::post('/corte/socio/pagos', [CorteController::class, 'pagarSocio'])->middleware('admin')->name('corte.socio.pagar');
+    Route::delete('/corte/socio/pagos/{pago}', [CorteController::class, 'deshacerSocio'])->middleware('admin')->name('corte.socio.deshacer');
 
     // Visor del Chrome de cada cuenta (administrador y socio).
     Route::get('/google/visor/{account}', [VisorGoogleController::class, 'show'])->name('google.visor');
