@@ -9,6 +9,7 @@ use App\Support\Hoy;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
@@ -94,6 +95,94 @@ class GrupoGoogle
         $datos = $this->ejecutar($account, $forzar ? ['abrir', 'forzar'] : ['abrir'], 60, requiereConexion: false, entorno: ['ZENBOT_FICHA' => (string) $ficha]);
 
         return ['sesion' => (bool) ($datos['sesion'] ?? false), 'pantalla' => (int) ($datos['pantalla'] ?? 1)];
+    }
+
+    /** Dominio de la clave provisional del Chrome de «Crear cuenta» (nueva-<clave>@crear.zengpt): nunca es un correo real. */
+    public const DOMINIO_ALTA = 'crear.zengpt';
+
+    /** Clave provisional con la que el Chrome de «Crear cuenta» guarda su perfil hasta que se le asigna a la cuenta nueva. */
+    public static function correoAlta(string $clave): string
+    {
+        return 'nueva-'.$clave.'@'.self::DOMINIO_ALTA;
+    }
+
+    /** Carpeta del perfil de Chrome de un correo (la misma regla que el script: minúsculas y solo [a-z0-9@._-]). */
+    public static function perfil(string $correo): string
+    {
+        return rtrim((string) config('zengpt.google.perfiles'), '/').'/'.preg_replace('/[^a-z0-9@._-]/', '_', mb_strtolower(trim($correo)));
+    }
+
+    /** Cómo se nombra en los avisos un visor abierto: el de «Crear cuenta» no tiene correo todavía. */
+    public static function nombreVisor(string $correo): string
+    {
+        return str_ends_with($correo, '@'.self::DOMINIO_ALTA) ? 'una cuenta nueva (Crear cuenta)' : $correo;
+    }
+
+    /**
+     * Visor de «Crear cuenta»: abre un Chrome con perfil nuevo en el alta de Google, en su propia pantalla. La persona crea
+     * el Gmail A MANO (datos, teléfono, captcha: nada de eso se automatiza). Si se recarga a media alta, se deja como estaba.
+     *
+     * @return array{sesion: bool, pantalla: int}
+     */
+    public function abrirAlta(string $clave, bool $forzar = false, ?string $ficha = null): array
+    {
+        $datos = $this->correr(self::correoAlta($clave), '', '', $forzar ? ['crear', 'forzar'] : ['crear'], 60, ['ZENBOT_FICHA' => (string) $ficha]);
+        if (! ($datos['ok'] ?? false)) {
+            throw ($datos['error'] ?? '') === 'sin_pantalla'
+                ? new VisorOcupado(array_values(array_map(self::nombreVisor(...), array_filter((array) ($datos['ocupadas'] ?? []), 'is_string'))))
+                : new RuntimeException('No se pudo abrir el Chrome para crear la cuenta. Intenta de nuevo en un momento.');
+        }
+
+        return ['sesion' => false, 'pantalla' => (int) ($datos['pantalla'] ?? 1)];
+    }
+
+    /** Cierra el Chrome de «Crear cuenta». Con `ficha`, solo si sigue siendo el de esa pestaña. */
+    public function cerrarAlta(string $clave, ?string $ficha = null): void
+    {
+        $this->correr(self::correoAlta($clave), '', '', ['cerrar'], 30, ['ZENBOT_FICHA' => (string) $ficha]);
+    }
+
+    /** Cancela «Crear cuenta»: cierra su Chrome y borra el perfil provisional. */
+    public function descartarAlta(string $clave): void
+    {
+        try {
+            $this->cerrarAlta($clave);
+        } catch (RuntimeException) {
+            // Si ya estaba cerrado no pasa nada.
+        }
+        File::deleteDirectory(self::perfil(self::correoAlta($clave)));
+    }
+
+    /**
+     * La cuenta ya se creó en el visor: se cierra su Chrome y el perfil provisional pasa a ser el de `correo`, así la
+     * sesión de Google que dejó el alta queda en el Chrome de esa cuenta (sin volver a iniciar sesión en otro equipo).
+     */
+    public function asignarAlta(string $clave, string $correo): void
+    {
+        $origen = self::perfil(self::correoAlta($clave));
+        $destino = self::perfil($correo);
+        if (! is_dir($origen)) {
+            throw new RuntimeException('No encontré el Chrome de esta alta: vuelve a abrir «Crear cuenta en el visor».');
+        }
+        if (is_dir($destino) && (new \FilesystemIterator($destino))->valid()) {
+            throw new RuntimeException('Ese correo ya tiene un Chrome en el servidor: no se reemplaza. Revisa el correo.');
+        }
+
+        $this->cerrarAlta($clave);
+        File::deleteDirectory($destino);
+        if (! @rename($origen, $destino)) {
+            throw new RuntimeException('No se pudo pasar el Chrome a la cuenta nueva. Intenta de nuevo.');
+        }
+    }
+
+    /** Borra perfiles de «Crear cuenta» abandonados (más de 2 días sin tocarse). */
+    public static function limpiarAltasViejas(): void
+    {
+        foreach (glob(rtrim((string) config('zengpt.google.perfiles'), '/').'/nueva-*@'.self::DOMINIO_ALTA, GLOB_ONLYDIR) ?: [] as $carpeta) {
+            if (filemtime($carpeta) < now()->subDays(2)->getTimestamp()) {
+                File::deleteDirectory($carpeta);
+            }
+        }
     }
 
     /** Cierra el Chrome de la cuenta (fin del visor). Con `ficha`, solo si sigue siendo el de esa pestaña. */
@@ -398,31 +487,7 @@ class GrupoGoogle
             throw new RuntimeException('Esta cuenta aún no tiene su sesión de Google en el servidor: conéctala con «Conectar con Google (visor)».');
         }
 
-        $lock = Cache::lock('zenbot-navegador', $segundos + 10);
-        try {
-            $lock->block((int) config('zengpt.google.espera', 15));
-        } catch (LockTimeoutException) {
-            throw new RuntimeException('El servidor está ocupado con otra cuenta; intenta en unos segundos.');
-        }
-
-        try {
-            $resultado = Process::timeout($segundos)
-                ->env([
-                    'ZENBOT_ADMIN' => mb_strtolower($account->email),
-                    // Por si Google pide «verifica que eres tú»: contraseña y clave 2FA de la cuenta (solo en el entorno del proceso).
-                    'ZENBOT_PASS' => (string) $account->password,
-                    'ZENBOT_TOTP' => self::secreto2fa($account->twofa_url),
-                    'ZENBOT_PANTALLAS' => (string) config('zengpt.google.pantallas', 3),
-                ] + $entorno)
-                ->run([(string) config('zengpt.google.node', 'node'), (string) config('zengpt.google.script'), ...$argumentos]);
-        } finally {
-            $lock->release();
-        }
-
-        $datos = json_decode(trim($resultado->output()), true);
-        if (! is_array($datos)) {
-            throw new RuntimeException('No se pudo hablar con Google (el lector no respondió).');
-        }
+        $datos = $this->correr(mb_strtolower($account->email), (string) $account->password, self::secreto2fa($account->twofa_url), $argumentos, $segundos, $entorno);
 
         if (! ($datos['ok'] ?? false)) {
             if (filled($datos['detalle'] ?? null)) {
@@ -431,7 +496,7 @@ class GrupoGoogle
 
             // Cada visor abierto ocupa una pantalla; si están todas en uso, se dice con qué cuentas.
             if (($datos['error'] ?? '') === 'sin_pantalla') {
-                throw new VisorOcupado(array_values(array_filter((array) ($datos['ocupadas'] ?? []), 'is_string')));
+                throw new VisorOcupado(array_values(array_map(self::nombreVisor(...), array_filter((array) ($datos['ocupadas'] ?? []), 'is_string'))));
             }
 
             // «Has alcanzado el límite de invitaciones al grupo familiar»: se marca el bloqueo (sus espacios libres
@@ -458,6 +523,43 @@ class GrupoGoogle
                 'verificacion_atorada' => 'Google no aceptó la verificación automática. Quedó abierto: termínalo en «Abrir visor» y vuelve a intentar.',
                 default => 'Google no respondió como se esperaba. Intenta de nuevo en un momento.',
             });
+        }
+
+        return $datos;
+    }
+
+    /**
+     * Corre el script del Chrome para `correo` (ZENBOT_ADMIN), de uno en uno (candado). La contraseña y la clave 2FA van
+     * solo en el entorno del proceso, nunca en la línea de comandos. Devuelve lo que contestó el script.
+     *
+     * @return array<string, mixed>
+     */
+    private function correr(string $correo, string $clave, string $totp, array $argumentos, int $segundos, array $entorno = []): array
+    {
+        $lock = Cache::lock('zenbot-navegador', $segundos + 10);
+        try {
+            $lock->block((int) config('zengpt.google.espera', 15));
+        } catch (LockTimeoutException) {
+            throw new RuntimeException('El servidor está ocupado con otra cuenta; intenta en unos segundos.');
+        }
+
+        try {
+            $resultado = Process::timeout($segundos)
+                ->env([
+                    'ZENBOT_ADMIN' => $correo,
+                    // Por si Google pide «verifica que eres tú»: contraseña y clave 2FA de la cuenta (solo en el entorno del proceso).
+                    'ZENBOT_PASS' => $clave,
+                    'ZENBOT_TOTP' => $totp,
+                    'ZENBOT_PANTALLAS' => (string) config('zengpt.google.pantallas', 3),
+                ] + $entorno)
+                ->run([(string) config('zengpt.google.node', 'node'), (string) config('zengpt.google.script'), ...$argumentos]);
+        } finally {
+            $lock->release();
+        }
+
+        $datos = json_decode(trim($resultado->output()), true);
+        if (! is_array($datos)) {
+            throw new RuntimeException('No se pudo hablar con Google (el lector no respondió).');
         }
 
         return $datos;

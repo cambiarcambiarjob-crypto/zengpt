@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { Ban, CircleCheck, Plus, Power, SearchX, Sparkles } from 'lucide-react';
+import { Ban, CircleCheck, MonitorSmartphone, Plus, Power, SearchX, Sparkles } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Buscador } from '@/components/cuentas/Buscador';
 import { ModalActivar } from '@/components/cuentas/ModalActivar';
@@ -9,7 +9,7 @@ import { ResumenCuentas } from '@/components/cuentas/ResumenCuentas';
 import { TarjetaCuenta } from '@/components/cuentas/TarjetaCuenta';
 import { urlCuentas, type EstadoFiltro } from '@/components/cuentas/utilidades';
 import { Aparecer } from '@/components/ui/Aparecer';
-import { Boton, EnlaceBoton } from '@/components/ui/Boton';
+import { Boton, EnlaceBoton, estilosBoton, type VarianteBoton } from '@/components/ui/Boton';
 import { Confirmar } from '@/components/ui/Confirmar';
 import { EstadoVacio } from '@/components/ui/EstadoVacio';
 import { Pestanas } from '@/components/ui/Pestanas';
@@ -34,6 +34,25 @@ const ESTADOS: { valor: EstadoFiltro; etiqueta: string }[] = [
     { valor: 'vencidas', etiqueta: 'Vencidas' },
     { valor: 'todas', etiqueta: 'Todas' },
 ];
+
+/**
+ * «Crear cuenta en el visor» (apartado «Sin Gemini»): abre en otra pestaña un Chrome nuevo del servidor en el alta de
+ * Google; la cuenta se crea a mano ahí y, al guardarla, ese Chrome queda asignado a ella (con la sesión ya iniciada).
+ */
+function CrearEnVisor({ variante = 'secundario' }: { variante?: VarianteBoton }) {
+    return (
+        <a
+            href="/google/crear"
+            target="_blank"
+            rel="noopener"
+            className={estilosBoton({ variante })}
+            title="Abre un Chrome nuevo del servidor en el alta de Google: creas la cuenta ahí y, al guardarla, ese Chrome queda asignado a ella."
+        >
+            <MonitorSmartphone className="size-4" aria-hidden="true" />
+            Crear cuenta en el visor
+        </a>
+    );
+}
 
 const PAUSA_BUSQUEDA = 260; // ms sin teclear antes de consultar al servidor
 
@@ -275,9 +294,12 @@ export default function CuentasIndex() {
             ancho="ancho"
             descripcion={descripcion}
             acciones={
-                <Boton variante="primario" icono={<Plus className="size-4" aria-hidden="true" />} onClick={nuevaCuenta} title="Nueva cuenta (tecla N)" aria-keyshortcuts="n">
-                    Nueva cuenta
-                </Boton>
+                <>
+                    {filtros.estado === 'sin_gemini' && <CrearEnVisor />}
+                    <Boton variante="primario" icono={<Plus className="size-4" aria-hidden="true" />} onClick={nuevaCuenta} title="Nueva cuenta (tecla N)" aria-keyshortcuts="n">
+                        Nueva cuenta
+                    </Boton>
+                </>
             }
         >
             <p className="sr-only" role="status">
@@ -371,9 +393,12 @@ export default function CuentasIndex() {
                         titulo="Ninguna cuenta sin Gemini"
                         descripcion="Al agregar un Gmail que todavía no tiene el plan, marca «Todavía no tiene Gemini»: queda aquí y no se vende hasta que lo tenga."
                         accion={
-                            <Boton variante="primario" icono={<Plus className="size-4" aria-hidden="true" />} onClick={nuevaCuenta}>
-                                Agregar cuenta sin Gemini
-                            </Boton>
+                            <>
+                                <CrearEnVisor variante="primario" />
+                                <Boton icono={<Plus className="size-4" aria-hidden="true" />} onClick={nuevaCuenta}>
+                                    Agregar cuenta sin Gemini
+                                </Boton>
+                            </>
                         }
                     />
                 </Tarjeta>

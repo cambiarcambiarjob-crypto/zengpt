@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CorteController;
+use App\Http\Controllers\CrearCuentaGoogleController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DayController;
 use App\Http\Controllers\ProfileController;
@@ -68,6 +69,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/google/visor/{account}/cerrar', [VisorGoogleController::class, 'cerrar'])->name('google.visor.cerrar');
     Route::post('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'sacarMiembros'])->middleware('throttle:6,1')->name('google.visor.sacar');
     Route::get('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'estadoSacar'])->middleware('throttle:120,1')->name('google.visor.sacar.estado');
+
+    // Visor de «Crear cuenta» (apartado «Sin Gemini»): Chrome nuevo en el alta de Google; al guardar, se asigna a la cuenta.
+    Route::get('/google/crear', [CrearCuentaGoogleController::class, 'nueva'])->name('google.crear');
+    Route::get('/google/crear/{clave}', [CrearCuentaGoogleController::class, 'show'])->name('google.crear.visor');
+    Route::post('/google/crear/{clave}/login', [CrearCuentaGoogleController::class, 'login'])->middleware('throttle:10,1')->name('google.crear.login');
+    Route::post('/google/crear/{clave}/cerrar', [CrearCuentaGoogleController::class, 'cerrar'])->name('google.crear.cerrar');
+    Route::post('/google/crear/{clave}/guardar', [CrearCuentaGoogleController::class, 'guardar'])->middleware('throttle:10,1')->name('google.crear.guardar');
 
     Route::middleware('admin')->group(function () {
         Route::get('/vendedores', [SellerController::class, 'index'])->name('vendedores.index');

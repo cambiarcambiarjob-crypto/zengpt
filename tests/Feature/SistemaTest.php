@@ -498,6 +498,65 @@ class SistemaTest extends TestCase
         $this->assertTrue($vieja->fresh()->isActive());
     }
 
+    public function test_crear_cuenta_en_el_visor_le_asigna_ese_chrome_a_la_cuenta_nueva(): void
+    {
+        $perfiles = sys_get_temp_dir().'/zengpt-perfiles-'.uniqid();
+        mkdir($perfiles);
+        config(['zengpt.google.perfiles' => $perfiles]);
+
+        // Un alta abandonada hace días se borra al empezar otra.
+        mkdir($vieja = "{$perfiles}/nueva-aaaaaaaaaaaaaaaa@crear.zengpt");
+        touch($vieja, now()->subDays(3)->getTimestamp());
+
+        $this->get('/google/crear')->assertRedirect('/login');
+        $destino = $this->actingAs($this->socio)->get('/google/crear')->assertRedirect()->headers->get('Location');
+        $this->assertMatchesRegularExpression('#/google/crear/[a-z0-9]{16}$#', $destino);
+        $this->assertDirectoryDoesNotExist($vieja);
+        $clave = basename($destino);
+        $this->actingAs($this->socio)->get("/google/crear/{$clave}")->assertOk()->assertSee('Crear cuenta de Google')->assertSee('Pegar en el visor')->assertHeader('Cache-Control', 'no-store, private');
+        $this->actingAs($this->socio)->get('/google/crear/NO-VALE')->assertNotFound();
+
+        // Abre un Chrome nuevo en el alta de Google, con su clave provisional (nunca la de una cuenta real).
+        $provisional = "nueva-{$clave}@crear.zengpt";
+        Process::fake(['*' => Process::result(json_encode(['ok' => true, 'sesion' => false, 'pantalla' => 2]))]);
+        $this->actingAs($this->socio)->postJson("/google/crear/{$clave}/login", ['ficha' => 'pestana-123'])->assertOk()->assertJson(['ok' => true, 'pantalla' => 2]);
+        Process::assertRan(fn ($p) => in_array('crear', (array) $p->command, true) && ($p->environment['ZENBOT_ADMIN'] ?? null) === $provisional && ($p->environment['ZENBOT_PASS'] ?? null) === '');
+
+        // Si las pantallas están ocupadas, el alta se nombra como tal (no con su clave provisional).
+        Process::fake(['*' => Process::result(json_encode(['ok' => false, 'error' => 'sin_pantalla', 'ocupadas' => [$provisional, 'otra@gmail.com']]), exitCode: 1)]);
+        $this->actingAs($this->socio)->postJson("/google/crear/{$clave}/login")->assertStatus(409)->assertJson(['ocupadas' => ['una cuenta nueva (Crear cuenta)', 'otra@gmail.com']]);
+
+        // Al guardar: se cierra el Chrome del alta y su perfil (con la sesión de Google) pasa a ser el de la cuenta nueva.
+        mkdir("{$perfiles}/{$provisional}");
+        file_put_contents("{$perfiles}/{$provisional}/Cookies", 'sesion');
+        Process::fake(['*' => Process::result(json_encode(['ok' => true]))]);
+        $this->actingAs($this->socio)->post("/google/crear/{$clave}/guardar", ['email' => 'Recien.Creada@gmail.com', 'password' => 'clave-nueva', 'twofa_url' => ''])
+            ->assertRedirect('/cuentas?estado=sin_gemini')->assertSessionHas('success');
+        Process::assertRan(fn ($p) => in_array('cerrar', (array) $p->command, true) && ($p->environment['ZENBOT_ADMIN'] ?? null) === $provisional);
+        $cuenta = Account::query()->where('email', 'recien.creada@gmail.com')->firstOrFail();
+        $this->assertTrue($cuenta->sin_gemini);
+        $this->assertTrue($cuenta->por_activar);
+        $this->assertSame('clave-nueva', $cuenta->password);
+        $this->assertSame('sesion', file_get_contents("{$perfiles}/recien.creada@gmail.com/Cookies"));
+        $this->assertDirectoryDoesNotExist("{$perfiles}/{$provisional}");
+
+        // Sin el Chrome del alta (ya se asignó), con un correo repetido o si el correo ya tiene Chrome: no se guarda.
+        $this->actingAs($this->socio)->post("/google/crear/{$clave}/guardar", ['email' => 'otra.nueva@gmail.com'])->assertSessionHas('error', fn (string $m): bool => str_contains($m, 'No encontré el Chrome'));
+        $this->actingAs($this->socio)->post("/google/crear/{$clave}/guardar", ['email' => 'recien.creada@gmail.com'])->assertSessionHasErrors('email');
+        mkdir("{$perfiles}/{$provisional}");
+        mkdir("{$perfiles}/ya.tenia@gmail.com");
+        file_put_contents("{$perfiles}/ya.tenia@gmail.com/Cookies", 'otra');
+        $this->actingAs($this->socio)->post("/google/crear/{$clave}/guardar", ['email' => 'ya.tenia@gmail.com'])->assertSessionHas('error', fn (string $m): bool => str_contains($m, 'ya tiene un Chrome'));
+        $this->assertSame('otra', file_get_contents("{$perfiles}/ya.tenia@gmail.com/Cookies"));
+        $this->assertDatabaseMissing('accounts', ['email' => 'ya.tenia@gmail.com']);
+
+        // Al cerrar la pestaña solo se cierra el Chrome; «Cancelar» además borra el perfil provisional.
+        $this->actingAs($this->socio)->post("/google/crear/{$clave}/cerrar", ['ficha' => 'pestana-123'])->assertNoContent();
+        $this->assertDirectoryExists("{$perfiles}/{$provisional}");
+        $this->actingAs($this->socio)->post("/google/crear/{$clave}/cerrar")->assertRedirect('/cuentas?estado=sin_gemini');
+        $this->assertDirectoryDoesNotExist("{$perfiles}/{$provisional}");
+    }
+
     public function test_las_cuentas_sin_gemini_van_aparte_hasta_que_tienen_gemini(): void
     {
         $activa = $this->cuenta(['email' => 'activa@gmail.com']);

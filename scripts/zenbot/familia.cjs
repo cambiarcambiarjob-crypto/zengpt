@@ -6,6 +6,9 @@
 //
 //   node familia.cjs abrir [forzar]  → abre el Chrome de la cuenta para el visor (se queda abierto) → {"ok":true,"sesion":…,"pantalla":N}
 //                                      con «forzar», si todas las pantallas tienen visor abierto, cierra el más viejo
+//   node familia.cjs crear [forzar]  → como «abrir», pero en el alta de Google («Crear cuenta») con un perfil nuevo: la
+//                                      persona crea el Gmail A MANO en el visor; al guardarla, el sistema le pasa el perfil
+//                                      (ZENBOT_ADMIN = clave provisional nueva-…@crear.zengpt)
 //   node familia.cjs cerrar          → cierra el Chrome de la cuenta (fin del visor); con ZENBOT_FICHA, solo si es la de
 //                                      la pestaña que lo abrió (al cerrar o recargar una pestaña no se tumba la nueva)
 //   node familia.cjs leer            → {"ok":true,"admin":"…","miembros":[…],"invitaciones":[…],"limite":false}
@@ -34,6 +37,8 @@ const ESTADO = path.join(PERFILES, '.estado.json');
 // Un visor olvidado deja de apartar su pantalla después de este tiempo.
 const VISOR_MINUTOS = 20;
 const BASE = 'https://myaccount.google.com/';
+// Alta de una cuenta de Google nueva (el visor de «Crear cuenta»).
+const ALTA = 'https://accounts.google.com/signup?hl=es';
 const CORREO = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 // «Has alcanzado el límite de invitaciones al grupo familiar. Inténtalo de nuevo más tarde.» (Google deja de aceptar
 // invitaciones de la cuenta unos días).
@@ -424,7 +429,8 @@ async function sacarTodos(pagina) {
     let pantalla;
     let enVisor;
     try {
-        ({ navegador, pantalla, visor: enVisor } = await chromeDe(ESPERADO, accion === 'abrir', accion === 'abrir' && objetivo === 'forzar'));
+        const paraVisor = accion === 'abrir' || accion === 'crear';
+        ({ navegador, pantalla, visor: enVisor } = await chromeDe(ESPERADO, paraVisor, paraVisor && objetivo === 'forzar'));
     } catch (e) {
         return salir({ ok: false, error: e.codigo || 'sin_navegador', ocupadas: e.ocupadas || null, detalle: e.codigo ? e.detalle || null : String(e.message || e).slice(0, 200) }, 1);
     }
@@ -442,6 +448,21 @@ async function sacarTodos(pagina) {
     }
     const pagina = (pestana = await contexto.newPage());
     try {
+        if (accion === 'crear') {
+            // Visor de «Crear cuenta»: si el Chrome ya tenía algo abierto (se recargó la pestaña a media alta), se deja tal
+            // cual; si es nuevo, abre el alta de Google. Todo lo demás (datos, teléfono, captcha) lo hace la persona.
+            const previas = contexto.pages().filter((otra) => otra !== pagina && otra.url() !== 'about:blank');
+            if (previas.length > 0) {
+                await pagina.close().catch(() => {});
+                await previas[0].bringToFront().catch(() => {});
+            } else {
+                for (const otra of contexto.pages()) if (otra !== pagina) await otra.close().catch(() => {});
+                await pagina.goto(ALTA, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+                await pagina.bringToFront();
+            }
+            pestana = null;
+            return await salir({ ok: true, sesion: false, pantalla });
+        }
         if (accion === 'abrir') {
             // Visor: deja una sola pestaña al frente, en el grupo familiar (Google manda a iniciar sesión si hace falta).
             for (const otra of contexto.pages()) if (otra !== pagina) await otra.close().catch(() => {});
