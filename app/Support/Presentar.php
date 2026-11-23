@@ -27,6 +27,8 @@ final class Presentar
             'activa' => $account->isActive(),
             // Comprada pero sin usar: no es activa ni vencida hasta que alguien la activa.
             'por_activar' => (bool) $account->por_activar,
+            // Sin Gemini todavía: apartado propio; también es por_activar (no se vende ni cuenta como activa).
+            'sin_gemini' => (bool) $account->sin_gemini,
             'por_vencer' => $account->isActive() && $account->daysLeft() <= (int) config('zengpt.dias_aviso', 14),
             'notes' => $account->notes,
             'capacidad' => Account::capacity(),

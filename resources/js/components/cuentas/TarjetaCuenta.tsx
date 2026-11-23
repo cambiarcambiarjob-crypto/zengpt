@@ -1,5 +1,6 @@
-import { CircleCheck, Link2, Pencil, Power, StickyNote, Trash2 } from 'lucide-react';
-import { memo } from 'react';
+import { router } from '@inertiajs/react';
+import { CircleCheck, CircleSlash, Link2, Pencil, Power, Sparkles, StickyNote, Trash2 } from 'lucide-react';
+import { memo, useState } from 'react';
 import { BarraEspacios } from '@/components/ui/BarraEspacios';
 import { Boton } from '@/components/ui/Boton';
 import { estadoDeCuenta, Insignia } from '@/components/ui/Insignia';
@@ -28,8 +29,8 @@ export interface TarjetaCuentaProps {
     alActivar: (cuenta: Cuenta) => void;
 }
 
-const BORDE = { activa: 'border-borde', por_vencer: 'border-alerta/30', vencida: 'border-peligro/25', por_activar: 'border-info/30 border-dashed' } as const;
-const TONO_DIAS = { activa: 'text-suave', por_vencer: 'text-alerta', vencida: 'text-peligro', por_activar: 'text-info' } as const;
+const BORDE = { activa: 'border-borde', por_vencer: 'border-alerta/30', vencida: 'border-peligro/25', por_activar: 'border-info/30 border-dashed', sin_gemini: 'border-alerta/30 border-dashed' } as const;
+const TONO_DIAS = { activa: 'text-suave', por_vencer: 'text-alerta', vencida: 'text-peligro', por_activar: 'text-info', sin_gemini: 'text-alerta' } as const;
 
 /**
  * Una cuenta con sus espacios: Gmail copiable, estado, vigencia, ingresos y las casillas (ocupadas o «Agregar cliente»).
@@ -38,7 +39,13 @@ const TONO_DIAS = { activa: 'text-suave', por_vencer: 'text-alerta', vencida: 't
 export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda, alEditar, alEliminar, alAgregarCliente, alEditarCliente, alLiberar, alActivar }: TarjetaCuentaProps) {
     const estado = estadoDeCuenta(cuenta);
     const vencida = estado === 'vencida';
-    const porActivar = estado === 'por_activar';
+    const sinGemini = estado === 'sin_gemini';
+    // Las «Sin Gemini» tampoco se venden: se tratan como por activar.
+    const porActivar = estado === 'por_activar' || sinGemini;
+    const [moviendo, setMoviendo] = useState(false);
+    // Entre «Sin Gemini» y «Por activar»: tiene = ya tiene Gemini.
+    const moverGemini = (tiene: boolean) =>
+        router.put(`/cuentas/${cuenta.id}/gemini`, { tiene }, { preserveScroll: true, onStart: () => setMoviendo(true), onFinish: () => setMoviendo(false) });
     const porPosicion = new Map(cuenta.espacios.map((espacio) => [espacio.position, espacio]));
     // Si algún espacio trae una posición fuera de 1…capacidad, igual se muestra (al final).
     const fuera = cuenta.espacios.filter((espacio) => espacio.position < 1 || espacio.position > cuenta.capacidad);
@@ -90,10 +97,39 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                             </span>
                         )}
                     </div>
-                    {porActivar ? (
+                    {sinGemini ? (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                            <Boton
+                                variante="primario"
+                                tamano="sm"
+                                icono={<Sparkles className="size-3.5" aria-hidden="true" />}
+                                cargando={moviendo}
+                                onClick={() => moverGemini(true)}
+                                aria-label={`La cuenta ${cuenta.email} ya tiene Gemini: pasarla a «Por activar»`}
+                            >
+                                Ya tiene Gemini
+                            </Boton>
+                            <p className="min-w-0 flex-1 basis-56 text-[13px] leading-snug text-suave">
+                                <span className={cn('font-medium', TONO_DIAS[estado])}>Sin Gemini</span>
+                                <span aria-hidden="true"> · </span>
+                                cuando tenga el plan, pásala a «Por activar»
+                            </p>
+                        </div>
+                    ) : porActivar ? (
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2">
                             <Boton variante="primario" tamano="sm" icono={<Power className="size-3.5" aria-hidden="true" />} onClick={() => alActivar(cuenta)} aria-label={`Activar la cuenta ${cuenta.email}`}>
                                 Activar
+                            </Boton>
+                            <Boton
+                                variante="fantasma"
+                                tamano="sm"
+                                icono={<CircleSlash className="size-3.5" aria-hidden="true" />}
+                                cargando={moviendo}
+                                onClick={() => moverGemini(false)}
+                                title="No tiene Gemini: apartarla en «Sin Gemini»"
+                                aria-label={`La cuenta ${cuenta.email} no tiene Gemini: pasarla a «Sin Gemini»`}
+                            >
+                                Sin Gemini
                             </Boton>
                             <p className="min-w-0 flex-1 basis-56 text-[13px] leading-snug text-suave">
                                 <span className={cn('font-medium', TONO_DIAS[estado])}>Pendiente de activar</span>
@@ -141,7 +177,7 @@ export const TarjetaCuenta = memo(function TarjetaCuenta({ cuenta, hoy, busqueda
                     )}
                     <GoogleCuenta cuenta={cuenta} />
                     {/* Cuentas por activar: Google manda las ligas al correo de ligas, una a la vez. */}
-                    {porActivar && (
+                    {porActivar && !sinGemini && (
                         <div className="mt-2.5">
                             <GenerarLigas cuenta={cuenta} />
                         </div>

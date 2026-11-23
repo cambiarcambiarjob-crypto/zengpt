@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { Ban, CircleCheck, Plus, Power, SearchX } from 'lucide-react';
+import { Ban, CircleCheck, Plus, Power, SearchX, Sparkles } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Buscador } from '@/components/cuentas/Buscador';
 import { ModalActivar } from '@/components/cuentas/ModalActivar';
@@ -30,6 +30,7 @@ const ESTADOS: { valor: EstadoFiltro; etiqueta: string }[] = [
     { valor: 'llenas', etiqueta: 'Llenas' },
     { valor: 'bloqueadas', etiqueta: 'Bloqueadas' },
     { valor: 'por_activar', etiqueta: 'Por activar' },
+    { valor: 'sin_gemini', etiqueta: 'Sin Gemini' },
     { valor: 'vencidas', etiqueta: 'Vencidas' },
     { valor: 'todas', etiqueta: 'Todas' },
 ];
@@ -49,7 +50,7 @@ function recuperarFoco(cuentaId?: number): void {
 }
 
 export default function CuentasIndex() {
-    const { cuentas, filtros, vendedores, negocio, auth, llenas, bloqueadas, por_activar: porActivar } = usePagina<CuentasProps>();
+    const { cuentas, filtros, vendedores, negocio, auth, llenas, bloqueadas, por_activar: porActivar, sin_gemini: sinGemini } = usePagina<CuentasProps>();
     const esAdmin = auth.user?.is_admin === true;
 
     // ── Búsqueda con pausa ────────────────────────────────────────────────────────────────────────────────────────
@@ -219,12 +220,16 @@ export default function CuentasIndex() {
     const opcionesEstado = useMemo(
         () =>
             ESTADOS.filter(
-                (opcion) => (opcion.valor !== 'bloqueadas' || bloqueadas > 0 || filtros.estado === 'bloqueadas') && (opcion.valor !== 'por_activar' || porActivar > 0 || filtros.estado === 'por_activar'),
+                (opcion) =>
+                    (opcion.valor !== 'bloqueadas' || bloqueadas > 0 || filtros.estado === 'bloqueadas') &&
+                    (opcion.valor !== 'por_activar' || porActivar > 0 || filtros.estado === 'por_activar') &&
+                    (opcion.valor !== 'sin_gemini' || sinGemini > 0 || filtros.estado === 'sin_gemini'),
             ).map((opcion) => {
-                const cuantas = opcion.valor === 'llenas' ? llenas : opcion.valor === 'bloqueadas' ? bloqueadas : opcion.valor === 'por_activar' ? porActivar : 0;
+                const cuantas =
+                    opcion.valor === 'llenas' ? llenas : opcion.valor === 'bloqueadas' ? bloqueadas : opcion.valor === 'por_activar' ? porActivar : opcion.valor === 'sin_gemini' ? sinGemini : 0;
                 return { ...opcion, etiqueta: cuantas > 0 ? `${opcion.etiqueta} · ${cuantas}` : opcion.etiqueta, href: urlCuentas(opcion.valor, qLimpia) };
             }),
-        [qLimpia, llenas, bloqueadas, porActivar, filtros.estado],
+        [qLimpia, llenas, bloqueadas, porActivar, sinGemini, filtros.estado],
     );
     const busquedaAplicada = useMemo(() => filtros.q.toLowerCase(), [filtros.q]);
 
@@ -247,6 +252,8 @@ export default function CuentasIndex() {
         descripcion = total === 0 ? 'Ninguna cuenta llena todavía' : `${plural(total, 'cuenta llena', 'cuentas llenas')}: ${negocio.capacidad} de ${negocio.capacidad}, todos pagados y dentro del grupo`;
     } else if (filtros.estado === 'por_activar') {
         descripcion = total === 0 ? 'Ninguna cuenta pendiente de activar' : `${plural(total, 'cuenta pendiente', 'cuentas pendientes')} de activar · no cuentan como activas hasta que las actives`;
+    } else if (filtros.estado === 'sin_gemini') {
+        descripcion = total === 0 ? 'Ninguna cuenta sin Gemini' : `${plural(total, 'cuenta')} sin Gemini · no se venden hasta que tengan el plan`;
     } else if (filtros.estado === 'bloqueadas') {
         descripcion =
             total === 0
@@ -259,6 +266,7 @@ export default function CuentasIndex() {
         if (libresBloqueados > 0) descripcion += ` · ${plural(libresBloqueados, 'bloqueado', 'bloqueados')} por Google`;
         if (llenas > 0) descripcion += ` · ${plural(llenas, 'llena', 'llenas')} aparte`;
         if (porActivar > 0) descripcion += ` · ${porActivar} por activar`;
+        if (sinGemini > 0) descripcion += ` · ${sinGemini} sin Gemini`;
     }
 
     return (
@@ -349,6 +357,14 @@ export default function CuentasIndex() {
                         icono={<Power className="size-5" />}
                         titulo="Ninguna cuenta pendiente de activar"
                         descripcion="Al agregar una cuenta que todavía no vas a usar, marca «Pendiente de activar»: queda aquí y no cuenta como activa hasta que la actives."
+                    />
+                </Tarjeta>
+            ) : filtros.estado === 'sin_gemini' ? (
+                <Tarjeta className="animate-entrada">
+                    <EstadoVacio
+                        icono={<Sparkles className="size-5" />}
+                        titulo="Ninguna cuenta sin Gemini"
+                        descripcion="Al agregar un Gmail que todavía no tiene el plan, marca «Todavía no tiene Gemini»: queda aquí y no se vende hasta que lo tenga."
                     />
                 </Tarjeta>
             ) : filtros.estado === 'bloqueadas' ? (

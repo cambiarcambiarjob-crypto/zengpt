@@ -3,13 +3,14 @@ import { cn } from '@/lib/cn';
 import { diasRestantes } from '@/lib/formato';
 import type { Cuenta } from '@/types';
 
-export type EstadoInsignia = 'activa' | 'por_vencer' | 'vencida' | 'por_activar' | 'libre' | 'ocupado' | 'neutral' | 'acento' | 'info';
+export type EstadoInsignia = 'activa' | 'por_vencer' | 'vencida' | 'por_activar' | 'sin_gemini' | 'libre' | 'ocupado' | 'neutral' | 'acento' | 'info';
 
 const ESTILOS: Record<EstadoInsignia, { caja: string; punto: string; texto: string }> = {
     activa: { caja: 'border-exito/30 bg-exito/10 text-exito', punto: 'bg-exito', texto: 'Activa' },
     por_vencer: { caja: 'border-alerta/35 bg-alerta/10 text-alerta', punto: 'bg-alerta', texto: 'Por vencer' },
     vencida: { caja: 'border-peligro/35 bg-peligro/10 text-peligro', punto: 'bg-peligro', texto: 'Vencida' },
     por_activar: { caja: 'border-info/35 border-dashed bg-info/8 text-info', punto: 'border border-info bg-transparent', texto: 'Por activar' },
+    sin_gemini: { caja: 'border-alerta/35 border-dashed bg-alerta/8 text-alerta', punto: 'border border-alerta bg-transparent', texto: 'Sin Gemini' },
     libre: { caja: 'border-acento/40 border-dashed bg-transparent text-acento', punto: 'border border-acento bg-transparent', texto: 'Libre' },
     ocupado: { caja: 'border-borde-fuerte bg-superficie-3 text-suave', punto: 'bg-tenue', texto: 'Ocupado' },
     neutral: { caja: 'border-borde-fuerte bg-superficie-2 text-suave', punto: 'bg-tenue', texto: '' },
@@ -47,8 +48,9 @@ export function Insignia({ estado = 'neutral', children, sinPunto = false, taman
     );
 }
 
-/** Estado de una cuenta a partir del contrato: 'por_activar' | 'vencida' | 'por_vencer' | 'activa'. */
-export function estadoDeCuenta(cuenta: Pick<Cuenta, 'activa' | 'por_vencer'> & { por_activar?: boolean }): 'activa' | 'por_vencer' | 'vencida' | 'por_activar' {
+/** Estado de una cuenta a partir del contrato: 'sin_gemini' | 'por_activar' | 'vencida' | 'por_vencer' | 'activa'. */
+export function estadoDeCuenta(cuenta: Pick<Cuenta, 'activa' | 'por_vencer'> & { por_activar?: boolean; sin_gemini?: boolean }): 'activa' | 'por_vencer' | 'vencida' | 'por_activar' | 'sin_gemini' {
+    if (cuenta.sin_gemini) return 'sin_gemini';
     if (cuenta.por_activar) return 'por_activar';
     if (!cuenta.activa) return 'vencida';
 
@@ -59,10 +61,10 @@ export function estadoDeCuenta(cuenta: Pick<Cuenta, 'activa' | 'por_vencer'> & {
  * Insignia de vigencia de una cuenta: «Activa», «Vence en 5 días», «Vence hoy» o «Venció hace 3 días».
  * Con `detalle` también las activas dicen cuánto falta («Vence en 62 días»).
  */
-export function InsigniaCuenta({ cuenta, detalle = false, ...resto }: { cuenta: Pick<Cuenta, 'activa' | 'por_vencer' | 'dias_restantes'> & { por_activar?: boolean }; detalle?: boolean } & Omit<InsigniaProps, 'estado' | 'children'>) {
+export function InsigniaCuenta({ cuenta, detalle = false, ...resto }: { cuenta: Pick<Cuenta, 'activa' | 'por_vencer' | 'dias_restantes'> & { por_activar?: boolean; sin_gemini?: boolean }; detalle?: boolean } & Omit<InsigniaProps, 'estado' | 'children'>) {
     const estado = estadoDeCuenta(cuenta);
     const frase = diasRestantes(cuenta.dias_restantes);
-    const texto = estado === 'por_activar' ? 'Por activar' : estado === 'activa' && !detalle ? 'Activa' : frase.charAt(0).toUpperCase() + frase.slice(1);
+    const texto = estado === 'sin_gemini' ? 'Sin Gemini' : estado === 'por_activar' ? 'Por activar' : estado === 'activa' && !detalle ? 'Activa' : frase.charAt(0).toUpperCase() + frase.slice(1);
 
     return (
         <Insignia estado={estado} {...resto}>

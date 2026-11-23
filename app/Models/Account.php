@@ -16,11 +16,11 @@ class Account extends Model
 {
     protected $hidden = ['password'];
 
-    protected $fillable = ['email', 'password', 'twofa_url', 'invite_links', 'started_on', 'expires_on', 'notes', 'created_by', 'por_activar'];
+    protected $fillable = ['email', 'password', 'twofa_url', 'invite_links', 'started_on', 'expires_on', 'notes', 'created_by', 'por_activar', 'sin_gemini'];
 
     protected function casts(): array
     {
-        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array', 'google_extra' => 'array', 'google_conectada' => 'boolean', 'google_ligas' => 'integer', 'google_synced_at' => 'datetime', 'google_bloqueo_hasta' => 'datetime', 'por_activar' => 'boolean'];
+        return ['started_on' => 'date:Y-m-d', 'expires_on' => 'date:Y-m-d', 'password' => 'encrypted', 'invite_links' => 'array', 'google_extra' => 'array', 'google_conectada' => 'boolean', 'google_ligas' => 'integer', 'google_synced_at' => 'datetime', 'google_bloqueo_hasta' => 'datetime', 'por_activar' => 'boolean', 'sin_gemini' => 'boolean'];
     }
 
     public function setEmailAttribute(string $value): void
@@ -44,10 +44,16 @@ class Account extends Model
         return $query->where('por_activar', false)->whereDate('expires_on', '<', Hoy::fecha());
     }
 
-    /** Compradas pero sin usar todavía: no cuentan como activas hasta que se activan. */
+    /** Compradas pero sin usar todavía: no cuentan como activas hasta que se activan. Las «Sin Gemini» van aparte. */
     public function scopePorActivar(Builder $query): Builder
     {
-        return $query->where('por_activar', true);
+        return $query->where('por_activar', true)->where('sin_gemini', false);
+    }
+
+    /** Gmails que todavía no tienen Gemini: no se venden ni cuentan como activas hasta que lo tengan. */
+    public function scopeSinGemini(Builder $query): Builder
+    {
+        return $query->where('sin_gemini', true);
     }
 
     public function isActive(): bool
@@ -64,6 +70,7 @@ class Account extends Model
 
         $this->forceFill([
             'por_activar' => false,
+            'sin_gemini' => false,
             'started_on' => $desde->toDateString(),
             'expires_on' => $desde->copy()->addMonthsNoOverflow((int) config('zengpt.meses_cuenta'))->toDateString(),
         ])->save();

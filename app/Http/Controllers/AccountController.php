@@ -20,7 +20,7 @@ class AccountController extends Controller
 {
     public function index(Request $request): Response
     {
-        $estado = in_array($request->query('estado'), ['activas', 'llenas', 'bloqueadas', 'por_activar', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
+        $estado = in_array($request->query('estado'), ['activas', 'llenas', 'bloqueadas', 'por_activar', 'sin_gemini', 'vencidas', 'todas', 'con_espacio', 'por_cobrar'], true) ? $request->query('estado') : 'activas';
         $q = trim((string) $request->query('q'));
 
         $cuentas = Account::query()
@@ -29,6 +29,7 @@ class AccountController extends Controller
             ->when($estado === 'bloqueadas', fn ($query) => $query->where('google_bloqueo_hasta', '>', now()))
             ->when($estado === 'vencidas', fn ($query) => $query->expired())
             ->when($estado === 'por_activar', fn ($query) => $query->porActivar())
+            ->when($estado === 'sin_gemini', fn ($query) => $query->sinGemini())
             ->when($estado === 'por_cobrar', fn ($query) => $query->whereHas('slots', fn ($s) => $s->porCobrar()))
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
                 ->where('email', 'like', "%{$q}%")
@@ -51,6 +52,7 @@ class AccountController extends Controller
             'llenas' => $llenas,
             'bloqueadas' => Account::query()->active()->where('google_bloqueo_hasta', '>', now())->count(),
             'por_activar' => Account::query()->porActivar()->count(),
+            'sin_gemini' => Account::query()->sinGemini()->count(),
             'vendedores' => Seller::query()->where('active', true)->ordered()->get(['id', 'name', 'is_owner']),
         ]);
     }
@@ -69,11 +71,17 @@ class AccountController extends Controller
             'expires_on' => $inicio->copy()->addMonthsNoOverflow((int) config('zengpt.meses_cuenta'))->toDateString(),
             'notes' => $data['notes'] ?? null,
             'created_by' => $request->user()->id,
-            'por_activar' => $request->boolean('por_activar'),
+            // Una cuenta sin Gemini tampoco se puede usar todavía: siempre queda también por activar.
+            'por_activar' => $request->boolean('por_activar') || $request->boolean('sin_gemini'),
+            'sin_gemini' => $request->boolean('sin_gemini'),
         ]);
         $cuenta->syncInviteLinks();
 
-        return back()->with('success', $cuenta->por_activar ? 'Cuenta agregada en «Por activar».' : 'Cuenta agregada.');
+        return back()->with('success', match (true) {
+            $cuenta->sin_gemini => 'Cuenta agregada en «Sin Gemini».',
+            $cuenta->por_activar => 'Cuenta agregada en «Por activar».',
+            default => 'Cuenta agregada.',
+        });
     }
 
     /**
@@ -94,6 +102,33 @@ class AccountController extends Controller
         Process::path(base_path())->run(sprintf('setsid nohup %s artisan zenbot:generar-ligas %d > /dev/null 2>&1 &', escapeshellarg((string) config('zengpt.google.php')), $account->id));
 
         return back()->with('success', 'Generando las ligas: Google manda una invitación por lugar libre al buzón y cada liga se pone sola en su espacio.');
+    }
+
+    /**
+     * Mueve una cuenta entre «Sin Gemini» y «Por activar»: `tiene` = ya tiene Gemini (pasa a «Por activar»); si no, se
+     * aparta en «Sin Gemini». Solo con cuentas que todavía no se usan: una activa ya tiene clientes y no se aparta así.
+     */
+    public function gemini(Request $request, Account $account): RedirectResponse
+    {
+        $tiene = $request->boolean('tiene');
+
+        if ($tiene) {
+            if (! $account->sin_gemini) {
+                return back()->with('error', 'Esa cuenta no estaba en «Sin Gemini».');
+            }
+
+            $account->forceFill(['sin_gemini' => false, 'por_activar' => true])->save();
+
+            return back()->with('success', "{$account->email} pasó a «Por activar».");
+        }
+
+        if (! $account->por_activar) {
+            return back()->with('error', 'Solo las cuentas por activar se pueden pasar a «Sin Gemini».');
+        }
+
+        $account->forceFill(['sin_gemini' => true])->save();
+
+        return back()->with('success', "{$account->email} pasó a «Sin Gemini».");
     }
 
     /** Activa una cuenta que estaba «por activar»: su vigencia corre desde la fecha de inicio elegida (hoy por omisión). */

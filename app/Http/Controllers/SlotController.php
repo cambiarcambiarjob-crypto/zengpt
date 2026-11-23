@@ -20,6 +20,10 @@ class SlotController extends Controller
     {
         $data = $this->validated($request);
 
+        if ($account->sin_gemini) {
+            return back()->with('error', 'La cuenta todavía no tiene Gemini: cuando lo tenga, pásala a «Por activar» y actívala.');
+        }
+
         if ($account->por_activar) {
             return back()->with('error', 'La cuenta está pendiente de activar: actívala para agregarle clientes.');
         }

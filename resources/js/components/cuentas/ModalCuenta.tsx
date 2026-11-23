@@ -32,6 +32,7 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
     const idFijar = useId();
     const idBloqueo = useId();
     const idPorActivar = useId();
+    const idSinGemini = useId();
     const bloqueoActual = cuenta?.google.bloqueo_hasta ?? null;
     const restanteBloqueo = useRestante(bloqueoActual);
 
@@ -48,6 +49,8 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
         notes: cuenta?.notes ?? '',
         // Cuenta nueva que todavía no se va a usar: queda en «Por activar».
         por_activar: false,
+        // Gmail que todavía no tiene Gemini: queda en «Sin Gemini» (y no se vende).
+        sin_gemini: false,
         // Bloqueo de invitaciones de Google: el día en que se liberan (desde las 0:00 de ese día).
         bloqueo: bloqueoActual !== null,
         google_bloqueo_hasta: bloqueoActual ? diaDelNegocio(bloqueoActual) : sumarDias(negocio.hoy, 7),
@@ -75,7 +78,7 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
             notes: datos.notes.trim(),
             invite_links: Object.fromEntries(datos.invite_links.map((l, i) => [String(i + 1), { url: l.url.trim(), expires_on: l.expires_on }])),
             ...(puedeFijar ? { expires_on: fijar ? datos.expires_on : '' } : {}),
-            ...(editando ? { google_bloqueo_hasta: datos.bloqueo ? datos.google_bloqueo_hasta : '' } : { por_activar: datos.por_activar }),
+            ...(editando ? { google_bloqueo_hasta: datos.bloqueo ? datos.google_bloqueo_hasta : '' } : { por_activar: datos.por_activar || datos.sin_gemini, sin_gemini: datos.sin_gemini }),
         }));
 
         const opciones = {
@@ -243,6 +246,27 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
                             </label>
                             <p id={`${idPorActivar}-ayuda`} className="text-[13px] leading-snug text-tenue">
                                 Todavía no se va a usar: queda en «Por activar» y no cuenta como activa hasta que la actives (ahí eliges desde qué día corre su vigencia).
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {!editando && (
+                    <div className="flex items-start gap-2.5 rounded-campo border border-borde p-3">
+                        <input
+                            id={idSinGemini}
+                            type="checkbox"
+                            aria-describedby={`${idSinGemini}-ayuda`}
+                            className="mt-0.5 size-4 shrink-0 cursor-pointer accent-acento"
+                            checked={form.data.sin_gemini}
+                            onChange={(evento) => form.setData('sin_gemini', evento.target.checked)}
+                        />
+                        <div className="min-w-0">
+                            <label htmlFor={idSinGemini} className="cursor-pointer text-sm text-texto">
+                                Todavía no tiene Gemini
+                            </label>
+                            <p id={`${idSinGemini}-ayuda`} className="text-[13px] leading-snug text-tenue">
+                                Queda aparte en «Sin Gemini» y no se vende. Cuando ya tenga el plan, con «Ya tiene Gemini» pasa a «Por activar».
                             </p>
                         </div>
                     </div>

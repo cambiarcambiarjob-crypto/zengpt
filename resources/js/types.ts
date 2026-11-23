@@ -29,6 +29,8 @@ export interface Cuenta {
     activa: boolean; por_vencer: boolean; notes: string | null;
     /** Comprada pero sin usar todavía: no cuenta como activa (ni vencida) hasta que se activa. */
     por_activar: boolean;
+    /** Todavía sin Gemini: va en su propio apartado y también es por_activar (no se vende hasta que lo tenga). */
+    sin_gemini: boolean;
     capacidad: number; ocupados: number; libres: number; ingresos: number; espacios: Espacio[];
     /** Clientes que deben dinero: sin pagar y con precio (los «Sin precio» no cuentan). */
     pendientes_pago: number;
@@ -66,7 +68,7 @@ export interface DashboardProps {
 
 export interface CuentasProps {
     cuentas: Cuenta[];
-    filtros: { estado: 'activas' | 'llenas' | 'bloqueadas' | 'por_activar' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
+    filtros: { estado: 'activas' | 'llenas' | 'bloqueadas' | 'por_activar' | 'sin_gemini' | 'vencidas' | 'todas' | 'con_espacio' | 'por_cobrar'; q: string };
     vendedores: Vendedor[];
     /** Cuántas cuentas vigentes están llenas (para la pestaña «Llenas»). */
     llenas: number;
@@ -74,6 +76,8 @@ export interface CuentasProps {
     bloqueadas: number;
     /** Cuántas cuentas están pendientes de activar (pestaña «Por activar»). */
     por_activar: number;
+    /** Cuántas cuentas no tienen Gemini todavía (pestaña «Sin Gemini»). */
+    sin_gemini: number;
 }
 
 export interface DiaProps {

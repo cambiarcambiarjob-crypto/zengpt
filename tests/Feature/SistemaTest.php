@@ -498,6 +498,52 @@ class SistemaTest extends TestCase
         $this->assertTrue($vieja->fresh()->isActive());
     }
 
+    public function test_las_cuentas_sin_gemini_van_aparte_hasta_que_tienen_gemini(): void
+    {
+        $activa = $this->cuenta(['email' => 'activa@gmail.com']);
+        $pendiente = $this->cuenta(['email' => 'pendiente@gmail.com']);
+        $pendiente->forceFill(['por_activar' => true])->save();
+        $this->actingAs($this->socio)->post('/cuentas', ['email' => 'Sin.Plan@gmail.com', 'password' => 'clave-de-prueba', 'started_on' => Hoy::fecha(), 'sin_gemini' => true])
+            ->assertSessionHas('success', 'Cuenta agregada en «Sin Gemini».');
+        $sinGemini = Account::query()->where('email', 'sin.plan@gmail.com')->firstOrFail();
+        // Siempre es también por activar: no se vende ni cuenta como activa ni vencida.
+        $this->assertTrue($sinGemini->sin_gemini);
+        $this->assertTrue($sinGemini->por_activar);
+        $this->assertFalse($sinGemini->isActive());
+
+        $correos = fn (string $url): array => collect($this->actingAs($this->socio)->get($url)->viewData('page')['props']['cuentas'])->pluck('email')->sort()->values()->all();
+        $this->assertSame(['activa@gmail.com'], $correos('/cuentas'));
+        $this->assertSame(['pendiente@gmail.com'], $correos('/cuentas?estado=por_activar'));
+        $this->assertSame(['sin.plan@gmail.com'], $correos('/cuentas?estado=sin_gemini'));
+        $this->assertSame([], $correos('/cuentas?estado=vencidas'));
+        $this->assertCount(3, $correos('/cuentas?estado=todas'));
+        $this->actingAs($this->socio)->get('/cuentas')->assertInertia(fn (Assert $p) => $p->where('por_activar', 1)->where('sin_gemini', 1));
+        $this->assertTrue(Presentar::cuenta($sinGemini->load('slots'))['sin_gemini']);
+        $this->assertFalse(Presentar::cuenta($pendiente->load('slots'))['sin_gemini']);
+        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $p) => $p->where('cuentas.activas', 1));
+
+        // No acepta clientes mientras no tenga Gemini.
+        $this->actingAs($this->socio)->post("/cuentas/{$sinGemini->id}/espacios", ['client_email' => 'cliente@gmail.com', 'price' => 200, 'seller_id' => $this->vendedor('Jorge')->id, 'sold_on' => Hoy::fecha()])
+            ->assertSessionHas('error', 'La cuenta todavía no tiene Gemini: cuando lo tenga, pásala a «Por activar» y actívala.');
+        $this->assertSame(0, $sinGemini->slots()->count());
+
+        // «Ya tiene Gemini» la pasa a «Por activar»; y una por activar se puede apartar en «Sin Gemini».
+        $this->actingAs($this->socio)->put("/cuentas/{$sinGemini->id}/gemini", ['tiene' => true])->assertSessionHas('success', 'sin.plan@gmail.com pasó a «Por activar».');
+        $this->actingAs($this->socio)->put("/cuentas/{$pendiente->id}/gemini", ['tiene' => false])->assertSessionHas('success', 'pendiente@gmail.com pasó a «Sin Gemini».');
+        $this->assertSame(['sin.plan@gmail.com'], $correos('/cuentas?estado=por_activar'));
+        $this->assertSame(['pendiente@gmail.com'], $correos('/cuentas?estado=sin_gemini'));
+        $this->actingAs($this->socio)->put("/cuentas/{$sinGemini->id}/gemini", ['tiene' => true])->assertSessionHas('error', 'Esa cuenta no estaba en «Sin Gemini».');
+
+        // Una activa (con clientes) no se aparta así.
+        $this->actingAs($this->socio)->put("/cuentas/{$activa->id}/gemini", ['tiene' => false])->assertSessionHas('error', 'Solo las cuentas por activar se pueden pasar a «Sin Gemini».');
+        $this->assertFalse($activa->fresh()->sin_gemini);
+
+        // Activarla directamente también le quita la marca.
+        $this->actingAs($this->socio)->put("/cuentas/{$pendiente->id}/activar")->assertSessionHas('success');
+        $this->assertFalse($pendiente->fresh()->sin_gemini);
+        $this->assertTrue($pendiente->fresh()->isActive());
+    }
+
     public function test_cada_vendedor_tiene_su_pantalla_y_sus_pagos_semanales(): void
     {
         $cuenta = $this->cuenta();
