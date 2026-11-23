@@ -357,6 +357,11 @@ export default function CuentasIndex() {
                         icono={<Power className="size-5" />}
                         titulo="Ninguna cuenta pendiente de activar"
                         descripcion="Al agregar una cuenta que todavía no vas a usar, marca «Pendiente de activar»: queda aquí y no cuenta como activa hasta que la actives."
+                        accion={
+                            <Boton variante="primario" icono={<Plus className="size-4" aria-hidden="true" />} onClick={nuevaCuenta}>
+                                Agregar cuenta por activar
+                            </Boton>
+                        }
                     />
                 </Tarjeta>
             ) : filtros.estado === 'sin_gemini' ? (
@@ -365,6 +370,11 @@ export default function CuentasIndex() {
                         icono={<Sparkles className="size-5" />}
                         titulo="Ninguna cuenta sin Gemini"
                         descripcion="Al agregar un Gmail que todavía no tiene el plan, marca «Todavía no tiene Gemini»: queda aquí y no se vende hasta que lo tenga."
+                        accion={
+                            <Boton variante="primario" icono={<Plus className="size-4" aria-hidden="true" />} onClick={nuevaCuenta}>
+                                Agregar cuenta sin Gemini
+                            </Boton>
+                        }
                     />
                 </Tarjeta>
             ) : filtros.estado === 'bloqueadas' ? (
@@ -412,7 +422,14 @@ export default function CuentasIndex() {
                 </section>
             )}
 
-            {dialogoCuenta && <ModalCuenta cuenta={dialogoCuenta.cuenta} alCerrar={cerrarCuenta} />}
+            {dialogoCuenta && (
+                <ModalCuenta
+                    cuenta={dialogoCuenta.cuenta}
+                    alCerrar={cerrarCuenta}
+                    // Desde «Por activar» o «Sin Gemini», la cuenta nueva nace en ese apartado.
+                    apartado={filtros.estado === 'por_activar' || filtros.estado === 'sin_gemini' ? filtros.estado : null}
+                />
+            )}
 
             {porActivarDialogo && <ModalActivar cuenta={porActivarDialogo} alCerrar={() => setPorActivarDialogo(null)} />}
 

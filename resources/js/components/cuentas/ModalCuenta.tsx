@@ -15,6 +15,11 @@ export interface ModalCuentaProps {
     /** La cuenta a editar, o null para crear una nueva. */
     cuenta: Cuenta | null;
     alCerrar: () => void;
+    /**
+     * Al crear: en qué apartado nace según la pestaña desde la que se abrió («Por activar» o «Sin Gemini»); con
+     * cualquier otra, como cuenta normal. Las casillas se pueden cambiar antes de guardar.
+     */
+    apartado?: 'por_activar' | 'sin_gemini' | null;
 }
 
 const MAX_NOTAS = 500;
@@ -24,7 +29,7 @@ const MAX_NOTAS = 500;
  * La vigencia la calcula el servidor (inicio + meses de la cuenta); aquí se muestra el resultado antes de guardar.
  * Solo el administrador, al editar, puede fijar otra fecha de vencimiento.
  */
-export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
+export function ModalCuenta({ cuenta, alCerrar, apartado = null }: ModalCuentaProps) {
     const { negocio, auth } = usePagina();
     const esAdmin = auth.user?.is_admin === true;
     const editando = cuenta !== null;
@@ -48,9 +53,9 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
         expires_on: puedeFijar && fijadaDeOrigen ? cuenta.expires_on : '',
         notes: cuenta?.notes ?? '',
         // Cuenta nueva que todavía no se va a usar: queda en «Por activar».
-        por_activar: false,
+        por_activar: apartado === 'por_activar' || apartado === 'sin_gemini',
         // Gmail que todavía no tiene Gemini: queda en «Sin Gemini» (y no se vende).
-        sin_gemini: false,
+        sin_gemini: apartado === 'sin_gemini',
         // Bloqueo de invitaciones de Google: el día en que se liberan (desde las 0:00 de ese día).
         bloqueo: bloqueoActual !== null,
         google_bloqueo_hasta: bloqueoActual ? diaDelNegocio(bloqueoActual) : sumarDias(negocio.hoy, 7),
@@ -98,7 +103,7 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
         <Modal
             abierto
             alCerrar={alCerrar}
-            titulo={editando ? 'Editar cuenta' : 'Nueva cuenta'}
+            titulo={editando ? 'Editar cuenta' : form.data.sin_gemini ? 'Nueva cuenta sin Gemini' : form.data.por_activar ? 'Nueva cuenta por activar' : 'Nueva cuenta'}
             descripcion={editando ? cuenta.email : `Un Gmail con ${plural(negocio.capacidad, 'espacio')} y ${plural(negocio.meses_cuenta, 'mes', 'meses')} de vigencia.`}
             alEnviar={enviar}
             bloqueado={form.processing}
@@ -236,8 +241,10 @@ export function ModalCuenta({ cuenta, alCerrar }: ModalCuentaProps) {
                             id={idPorActivar}
                             type="checkbox"
                             aria-describedby={`${idPorActivar}-ayuda`}
-                            className="mt-0.5 size-4 shrink-0 cursor-pointer accent-acento"
-                            checked={form.data.por_activar}
+                            className="mt-0.5 size-4 shrink-0 cursor-pointer accent-acento disabled:cursor-not-allowed disabled:opacity-60"
+                            // Sin Gemini siempre es también por activar: mientras esté marcada, esta va fija.
+                            checked={form.data.por_activar || form.data.sin_gemini}
+                            disabled={form.data.sin_gemini}
                             onChange={(evento) => form.setData('por_activar', evento.target.checked)}
                         />
                         <div className="min-w-0">
