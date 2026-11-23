@@ -22,6 +22,8 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->name('login.store');
 });
 
+// Cada «throttle:N,M,prefijo:» lleva su propio prefijo: sin él, Laravel cuenta TODAS las rutas con throttle en un solo
+// contador por usuario (p. ej. el código 2FA que pide cada visor abierto agotaba «Generar ligas» con un 429).
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
@@ -30,20 +32,20 @@ Route::middleware('auth')->group(function () {
     Route::get('/cuentas', [AccountController::class, 'index'])->name('cuentas.index');
     Route::post('/cuentas', [AccountController::class, 'store'])->name('cuentas.store');
     Route::put('/cuentas/{account}', [AccountController::class, 'update'])->name('cuentas.update');
-    Route::post('/cuentas/{account}/google', [AccountController::class, 'google'])->middleware('throttle:12,1')->name('cuentas.google');
+    Route::post('/cuentas/{account}/google', [AccountController::class, 'google'])->middleware('throttle:12,1,cuenta-revisar:')->name('cuentas.google');
     Route::put('/cuentas/{account}/bloqueo', [AccountController::class, 'bloqueo'])->name('cuentas.bloqueo');
     Route::put('/cuentas/{account}/activar', [AccountController::class, 'activar'])->name('cuentas.activar');
     Route::put('/cuentas/{account}/gemini', [AccountController::class, 'gemini'])->name('cuentas.gemini');
-    Route::post('/cuentas/{account}/ligas', [AccountController::class, 'generarLigas'])->middleware('throttle:6,1')->name('cuentas.ligas');
+    Route::post('/cuentas/{account}/ligas', [AccountController::class, 'generarLigas'])->middleware('throttle:6,1,cuenta-ligas:')->name('cuentas.ligas');
     Route::delete('/cuentas/{account}', [AccountController::class, 'destroy'])->name('cuentas.destroy');
 
     Route::post('/cuentas/{account}/espacios', [SlotController::class, 'store'])->name('espacios.store');
     Route::put('/espacios/{slot}', [SlotController::class, 'update'])->name('espacios.update');
     Route::put('/espacios/{slot}/invitacion', [SlotController::class, 'invitacion'])->name('espacios.invitacion');
-    Route::post('/espacios/{slot}/invitacion/correo', [SlotController::class, 'enviarCorreo'])->middleware('throttle:20,1')->name('espacios.invitacion.correo');
+    Route::post('/espacios/{slot}/invitacion/correo', [SlotController::class, 'enviarCorreo'])->middleware('throttle:20,1,espacio-correo:')->name('espacios.invitacion.correo');
     Route::put('/espacios/{slot}/pago', [SlotController::class, 'pago'])->name('espacios.pago');
-    Route::post('/espacios/{slot}/google', [SlotController::class, 'googleInvitar'])->middleware('throttle:12,1')->name('espacios.google.invitar');
-    Route::delete('/espacios/{slot}/google', [SlotController::class, 'googleSacar'])->middleware('throttle:12,1')->name('espacios.google.sacar');
+    Route::post('/espacios/{slot}/google', [SlotController::class, 'googleInvitar'])->middleware('throttle:12,1,espacio-invitar:')->name('espacios.google.invitar');
+    Route::delete('/espacios/{slot}/google', [SlotController::class, 'googleSacar'])->middleware('throttle:12,1,espacio-sacar:')->name('espacios.google.sacar');
     Route::delete('/espacios/{slot}', [SlotController::class, 'destroy'])->name('espacios.destroy');
 
     Route::get('/dia/{fecha?}', [DayController::class, 'show'])->name('dia.show');
@@ -63,19 +65,19 @@ Route::middleware('auth')->group(function () {
 
     // Visor del Chrome de cada cuenta (administrador y socio).
     Route::get('/google/visor/{account}', [VisorGoogleController::class, 'show'])->name('google.visor');
-    Route::get('/google/visor/{account}/codigo', [VisorGoogleController::class, 'codigo'])->middleware('throttle:60,1')->name('google.visor.codigo');
-    Route::post('/google/visor/{account}/login', [VisorGoogleController::class, 'login'])->middleware('throttle:10,1')->name('google.visor.login');
-    Route::post('/google/visor/{account}/listo', [VisorGoogleController::class, 'listo'])->middleware('throttle:10,1')->name('google.visor.listo');
+    Route::get('/google/visor/{account}/codigo', [VisorGoogleController::class, 'codigo'])->middleware('throttle:60,1,visor-codigo:')->name('google.visor.codigo');
+    Route::post('/google/visor/{account}/login', [VisorGoogleController::class, 'login'])->middleware('throttle:10,1,visor-abrir:')->name('google.visor.login');
+    Route::post('/google/visor/{account}/listo', [VisorGoogleController::class, 'listo'])->middleware('throttle:10,1,visor-listo:')->name('google.visor.listo');
     Route::post('/google/visor/{account}/cerrar', [VisorGoogleController::class, 'cerrar'])->name('google.visor.cerrar');
-    Route::post('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'sacarMiembros'])->middleware('throttle:6,1')->name('google.visor.sacar');
-    Route::get('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'estadoSacar'])->middleware('throttle:120,1')->name('google.visor.sacar.estado');
+    Route::post('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'sacarMiembros'])->middleware('throttle:6,1,visor-sacar:')->name('google.visor.sacar');
+    Route::get('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'estadoSacar'])->middleware('throttle:120,1,visor-sacar-estado:')->name('google.visor.sacar.estado');
 
     // Visor de «Crear cuenta» (apartado «Sin Gemini»): Chrome nuevo en el alta de Google; al guardar, se asigna a la cuenta.
     Route::get('/google/crear', [CrearCuentaGoogleController::class, 'nueva'])->name('google.crear');
     Route::get('/google/crear/{clave}', [CrearCuentaGoogleController::class, 'show'])->name('google.crear.visor');
-    Route::post('/google/crear/{clave}/login', [CrearCuentaGoogleController::class, 'login'])->middleware('throttle:10,1')->name('google.crear.login');
+    Route::post('/google/crear/{clave}/login', [CrearCuentaGoogleController::class, 'login'])->middleware('throttle:10,1,alta-abrir:')->name('google.crear.login');
     Route::post('/google/crear/{clave}/cerrar', [CrearCuentaGoogleController::class, 'cerrar'])->name('google.crear.cerrar');
-    Route::post('/google/crear/{clave}/guardar', [CrearCuentaGoogleController::class, 'guardar'])->middleware('throttle:10,1')->name('google.crear.guardar');
+    Route::post('/google/crear/{clave}/guardar', [CrearCuentaGoogleController::class, 'guardar'])->middleware('throttle:10,1,alta-guardar:')->name('google.crear.guardar');
 
     Route::middleware('admin')->group(function () {
         Route::get('/vendedores', [SellerController::class, 'index'])->name('vendedores.index');

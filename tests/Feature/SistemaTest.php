@@ -1034,6 +1034,11 @@ class SistemaTest extends TestCase
         $this->assertTrue(GrupoGoogle::esCorreoDeLigas('liga-9-abc123@buzon.ejemplo.com'));
         $this->assertFalse(GrupoGoogle::esCorreoDeLigas('cliente@buzon-falso.com'));
 
+        // Los visores abiertos piden su código 2FA cada 30 s: eso no gasta el límite de «Generar ligas» (antes daba 429).
+        for ($i = 0; $i < 12; $i++) {
+            $this->actingAs($this->socio)->getJson("/google/visor/{$cuenta->id}/codigo")->assertOk();
+        }
+
         // El botón se lanza en segundo plano.
         Process::fake();
         $this->actingAs($this->socio)->post("/cuentas/{$cuenta->id}/ligas")->assertSessionHas('success');
