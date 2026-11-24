@@ -188,7 +188,7 @@ class GrupoGoogle
      *
      * @return list<string> los visores cerrados (correo, o «una cuenta nueva» si era de «Crear cuenta»)
      */
-    public function cerrarOlvidados(int $minutos = 15): array
+    public function cerrarOlvidados(int $minutos = 5): array
     {
         $archivo = rtrim((string) config('zengpt.google.perfiles'), '/').'/.estado.json';
         $estado = is_readable($archivo) ? json_decode((string) file_get_contents($archivo), true) : null;

@@ -34,12 +34,12 @@ Schedule::command('google:revisar')->everyThirtyMinutes()->withoutOverlapping(20
 /*
 | Visores olvidados: si la pestaña de un visor se cerró sin avisar (celular apagado, sin internet, computadora
 | suspendida), su Chrome se quedaba prendido en el servidor para siempre. Cada visor abierto avisa cada minuto; el que
-| lleva 15 minutos sin avisar se cierra (la sesión de Google queda guardada en su perfil).
+| lleva 5 minutos sin avisar se cierra (la sesión de Google queda guardada en su perfil). Se revisa cada minuto.
 */
-Artisan::command('zenbot:cerrar-olvidados {--minutos=15}', function () {
+Artisan::command('zenbot:cerrar-olvidados {--minutos=5}', function () {
     foreach (app(GrupoGoogle::class)->cerrarOlvidados(max(1, (int) $this->option('minutos'))) as $visor) {
         $this->info("Se cerró el visor olvidado de {$visor}.");
     }
 })->purpose('Cierra el Chrome de los visores cuya pestaña ya no está abierta');
 
-Schedule::command('zenbot:cerrar-olvidados')->everyFiveMinutes()->withoutOverlapping(10);
+Schedule::command('zenbot:cerrar-olvidados')->everyMinute()->withoutOverlapping(5);

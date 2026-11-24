@@ -57,7 +57,7 @@ class CrearCuentaGoogleController extends Controller
         return response()->json(['ok' => true] + $abierto);
     }
 
-    /** La pestaña del alta sigue abierta (cada minuto): sin este aviso, su Chrome se cierra solo a los 15 minutos. */
+    /** La pestaña del alta sigue abierta (cada minuto): sin este aviso, su Chrome se cierra solo a los 5 minutos. */
     public function latido(string $clave): Response
     {
         $this->revisarClave($clave);

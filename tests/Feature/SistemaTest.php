@@ -510,7 +510,7 @@ class SistemaTest extends TestCase
         file_put_contents("{$perfiles}/.estado.json", json_encode(['pantallas' => [
             '1' => ['correo' => 'olvidada@gmail.com', 'pid' => 1, 'visor' => true, 'desde' => $hace(420)],
             '2' => ['correo' => 'abierta@gmail.com', 'pid' => 2, 'visor' => true, 'desde' => $hace(60)],
-            '3' => ['correo' => 'reciente@gmail.com', 'pid' => 3, 'visor' => true, 'desde' => $hace(5)],
+            '3' => ['correo' => 'reciente@gmail.com', 'pid' => 3, 'visor' => true, 'desde' => $hace(2)],
             '4' => ['correo' => 'sacando@gmail.com', 'pid' => 4, 'visor' => true, 'desde' => $hace(60)],
             '5' => ['correo' => 'nueva-abcdefghijklmnop@crear.zengpt', 'pid' => 5, 'visor' => true, 'desde' => $hace(30)],
         ]]));
