@@ -35,6 +35,14 @@ class VisorGoogleController extends Controller
         ])->header('Cache-Control', 'no-store');
     }
 
+    /** La pestaña del visor sigue abierta (cada minuto): sin este aviso, su Chrome se cierra solo a los 15 minutos. */
+    public function latido(Account $account): Response
+    {
+        GrupoGoogle::latido($account->email);
+
+        return response()->noContent();
+    }
+
     /** Código 2FA vigente y segundos que le quedan. */
     public function codigo(Account $account): JsonResponse
     {

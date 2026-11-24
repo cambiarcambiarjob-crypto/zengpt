@@ -69,6 +69,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/google/visor/{account}/login', [VisorGoogleController::class, 'login'])->middleware('throttle:10,1,visor-abrir:')->name('google.visor.login');
     Route::post('/google/visor/{account}/listo', [VisorGoogleController::class, 'listo'])->middleware('throttle:10,1,visor-listo:')->name('google.visor.listo');
     Route::post('/google/visor/{account}/cerrar', [VisorGoogleController::class, 'cerrar'])->name('google.visor.cerrar');
+    Route::post('/google/visor/{account}/latido', [VisorGoogleController::class, 'latido'])->middleware('throttle:30,1,visor-latido:')->name('google.visor.latido');
     Route::post('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'sacarMiembros'])->middleware('throttle:6,1,visor-sacar:')->name('google.visor.sacar');
     Route::get('/google/visor/{account}/sacar-miembros', [VisorGoogleController::class, 'estadoSacar'])->middleware('throttle:120,1,visor-sacar-estado:')->name('google.visor.sacar.estado');
 
@@ -77,6 +78,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/google/crear/{clave}', [CrearCuentaGoogleController::class, 'show'])->name('google.crear.visor');
     Route::post('/google/crear/{clave}/login', [CrearCuentaGoogleController::class, 'login'])->middleware('throttle:10,1,alta-abrir:')->name('google.crear.login');
     Route::post('/google/crear/{clave}/cerrar', [CrearCuentaGoogleController::class, 'cerrar'])->name('google.crear.cerrar');
+    Route::post('/google/crear/{clave}/latido', [CrearCuentaGoogleController::class, 'latido'])->middleware('throttle:30,1,alta-latido:')->name('google.crear.latido');
     Route::post('/google/crear/{clave}/guardar', [CrearCuentaGoogleController::class, 'guardar'])->middleware('throttle:10,1,alta-guardar:')->name('google.crear.guardar');
 
     Route::middleware('admin')->group(function () {

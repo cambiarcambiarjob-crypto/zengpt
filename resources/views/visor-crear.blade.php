@@ -207,6 +207,10 @@
         permitir(false);
         abrirChrome();
 
+        // Cada minuto la pestaña avisa que sigue abierta: si deja de avisar 15 minutos, el servidor cierra su Chrome.
+        const latido = () => { if (propio) fetch(location.pathname + '/latido', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf }, keepalive: true }).catch(() => {}); };
+        setInterval(latido, 60000);
+
         // Al cerrar (o dejar) esta pestaña, se cierra su Chrome y la pantalla queda libre (el perfil se guarda 2 días).
         window.addEventListener('pagehide', () => {
             if (!propio || guardando) return;

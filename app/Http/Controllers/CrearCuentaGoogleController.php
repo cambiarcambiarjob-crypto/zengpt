@@ -57,6 +57,15 @@ class CrearCuentaGoogleController extends Controller
         return response()->json(['ok' => true] + $abierto);
     }
 
+    /** La pestaña del alta sigue abierta (cada minuto): sin este aviso, su Chrome se cierra solo a los 15 minutos. */
+    public function latido(string $clave): Response
+    {
+        $this->revisarClave($clave);
+        GrupoGoogle::latido(GrupoGoogle::correoAlta($clave));
+
+        return response()->noContent();
+    }
+
     /**
      * Con `ficha` (la pestaña se cerró): solo cierra el Chrome; el perfil se queda por si se vuelve a abrir. Sin ficha
      * («Cancelar»): cierra el Chrome y borra el perfil provisional.

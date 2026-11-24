@@ -498,6 +498,38 @@ class SistemaTest extends TestCase
         $this->assertTrue($vieja->fresh()->isActive());
     }
 
+    public function test_los_visores_olvidados_se_cierran_solos_y_los_que_siguen_abiertos_no(): void
+    {
+        $perfiles = sys_get_temp_dir().'/zengpt-perfiles-'.uniqid();
+        mkdir($perfiles);
+        config(['zengpt.google.perfiles' => $perfiles]);
+        $hace = fn (int $minutos): int => now()->subMinutes($minutos)->getTimestamp() * 1000;
+        $sacando = $this->cuenta(['email' => 'sacando@gmail.com']);
+        $abierta = $this->cuenta(['email' => 'abierta@gmail.com']);
+        Cache::put("sacar-miembros:{$sacando->id}", ['estado' => 'sacando', 'inicio' => now()->getTimestamp()], 3600);
+        file_put_contents("{$perfiles}/.estado.json", json_encode(['pantallas' => [
+            '1' => ['correo' => 'olvidada@gmail.com', 'pid' => 1, 'visor' => true, 'desde' => $hace(420)],
+            '2' => ['correo' => 'abierta@gmail.com', 'pid' => 2, 'visor' => true, 'desde' => $hace(60)],
+            '3' => ['correo' => 'reciente@gmail.com', 'pid' => 3, 'visor' => true, 'desde' => $hace(5)],
+            '4' => ['correo' => 'sacando@gmail.com', 'pid' => 4, 'visor' => true, 'desde' => $hace(60)],
+            '5' => ['correo' => 'nueva-abcdefghijklmnop@crear.zengpt', 'pid' => 5, 'visor' => true, 'desde' => $hace(30)],
+        ]]));
+
+        // La pestaña abierta avisa cada minuto (visor de una cuenta y visor de «Crear cuenta»).
+        $this->actingAs($this->socio)->post("/google/visor/{$abierta->id}/latido")->assertNoContent();
+        $this->actingAs($this->socio)->post('/google/crear/abcdefghijklmnop/latido')->assertNoContent();
+        $this->post('/google/crear/abcdefghijklmnop/latido')->assertNoContent(); // la sesión sigue siendo del socio
+        auth()->logout();
+        $this->post("/google/visor/{$abierta->id}/latido")->assertRedirect('/login');
+
+        Process::fake(['*' => Process::result(json_encode(['ok' => true]))]);
+        $this->artisan('zenbot:cerrar-olvidados')->expectsOutputToContain('olvidada@gmail.com')->assertSuccessful();
+
+        // Solo se cierra la de 7 horas sin aviso: no la que avisa, ni la recién abierta, ni la que está sacando miembros.
+        Process::assertRanTimes(fn ($p) => in_array('cerrar', (array) $p->command, true), 1);
+        Process::assertRan(fn ($p) => in_array('cerrar', (array) $p->command, true) && ($p->environment['ZENBOT_ADMIN'] ?? null) === 'olvidada@gmail.com');
+    }
+
     public function test_crear_cuenta_en_el_visor_le_asigna_ese_chrome_a_la_cuenta_nueva(): void
     {
         $perfiles = sys_get_temp_dir().'/zengpt-perfiles-'.uniqid();

@@ -175,6 +175,52 @@ class GrupoGoogle
         }
     }
 
+    /** La pestaña del visor sigue abierta: lo avisa cada minuto (así no se cierra su Chrome por olvidado). */
+    public static function latido(string $correo): void
+    {
+        Cache::put('visor-latido:'.mb_strtolower(trim($correo)), now()->getTimestamp(), now()->addDay());
+    }
+
+    /**
+     * Cierra el Chrome de los visores olvidados: su pestaña se cerró sin avisar (se apagó el celular, se fue el internet,
+     * se suspendió la computadora) y lleva más de `minutos` sin latido desde que se abrió. No toca los que están sacando
+     * miembros o generando ligas. La sesión de Google queda guardada en el perfil: no se pierde nada.
+     *
+     * @return list<string> los visores cerrados (correo, o «una cuenta nueva» si era de «Crear cuenta»)
+     */
+    public function cerrarOlvidados(int $minutos = 15): array
+    {
+        $archivo = rtrim((string) config('zengpt.google.perfiles'), '/').'/.estado.json';
+        $estado = is_readable($archivo) ? json_decode((string) file_get_contents($archivo), true) : null;
+        $cerrados = [];
+
+        foreach ((array) ($estado['pantallas'] ?? []) as $pantalla) {
+            if (! is_array($pantalla) || ! ($pantalla['visor'] ?? false) || ! is_string($pantalla['correo'] ?? null)) {
+                continue;
+            }
+
+            $correo = mb_strtolower(trim($pantalla['correo']));
+            $ultimo = max((int) (((int) ($pantalla['desde'] ?? 0)) / 1000), (int) Cache::get('visor-latido:'.$correo, 0));
+            if (now()->getTimestamp() - $ultimo < $minutos * 60) {
+                continue;
+            }
+
+            $cuenta = Account::query()->where('email', $correo)->first();
+            if ($cuenta && ((self::estadoSacar($cuenta)['estado'] ?? null) === 'sacando' || (self::estadoLigas($cuenta)['estado'] ?? null) === 'generando')) {
+                continue;
+            }
+
+            try {
+                $this->correr($correo, '', '', ['cerrar'], 30);
+                $cerrados[] = self::nombreVisor($correo);
+            } catch (RuntimeException) {
+                // Ocupado o ya cerrado: se intenta en la siguiente vuelta.
+            }
+        }
+
+        return $cerrados;
+    }
+
     /** Borra perfiles de «Crear cuenta» abandonados (más de 2 días sin tocarse). */
     public static function limpiarAltasViejas(): void
     {
