@@ -23,6 +23,7 @@
         <span id="estado" class="estado"><span class="punto"></span><span id="estado-texto">Conectando…</span></span>
         <span class="espacio"></span>
         <button type="button" id="ir-login">Recargar el Chrome</button>
+        <button type="button" id="mayus" disabled title="Bloq Mayús de la pantalla del servidor: si está activado, todo lo que escribas sale en mayúsculas (también la contraseña). Pícale para cambiarlo.">Bloq Mayús: …</button>
         <form method="POST" action="/google/crear/{{ $clave }}/cerrar" style="margin:0" onsubmit="return confirm('Se cierra este Chrome y se borra lo que llevas de la cuenta nueva. ¿Cancelar?')">
             @csrf
             <button type="submit">Cancelar</button>
@@ -138,6 +139,30 @@
             rfb.addEventListener('disconnect', () => { if (pantalla === n) { estado('Desconectado: recarga la página', 'mal'); permitir(false); } });
         };
 
+        // Bloq Mayús de la pantalla del servidor: si alguien lo pica dentro del visor se queda activado y todo sale en
+        // mayúsculas (la contraseña también). El botón lo muestra y lo cambia; «Pegar en el visor» lo apaga antes de escribir.
+        const botonMayus = document.getElementById('mayus');
+        let mayus = null;
+        const pintarMayus = () => {
+            botonMayus.textContent = mayus === null ? 'Bloq Mayús: …' : mayus ? 'Bloq Mayús: ACTIVADO' : 'Bloq Mayús: desactivado';
+            botonMayus.classList.toggle('activadas', mayus === true);
+            botonMayus.disabled = !propio || mayus === null;
+        };
+        const leerMayus = async () => {
+            if (!propio) return pintarMayus();
+            try { mayus = (await (await fetch(location.pathname + '/mayusculas', { headers: { Accept: 'application/json' }, cache: 'no-store' })).json()).activadas; } catch {}
+            pintarMayus();
+        };
+        const fijarMayus = async (activar) => {
+            try {
+                const r = await fetch(location.pathname + '/mayusculas', { method: 'PUT', headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ activar }) });
+                mayus = (await r.json()).activadas;
+            } catch {}
+            pintarMayus();
+        };
+        botonMayus.addEventListener('click', () => fijarMayus(!mayus));
+        setInterval(leerMayus, 5000);
+
         // Pegar en el visor: teclea el dato, letra por letra, en el campo que tenga el foco en la pantalla.
         const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
         let tecleando = false;
@@ -147,6 +172,8 @@
             if (!texto) return avisar(clave === 'clave' ? 'Escribe o genera la contraseña primero.' : 'Escribe primero el Gmail.', false);
             if (tecleando) return;
             tecleando = true;
+            // Con Bloq Mayús activado el correo y la contraseña saldrían en mayúsculas: se apaga antes de escribir.
+            if (mayus !== false) await fijarMayus(false);
             rfb.focus();
             for (const letra of texto) {
                 const cp = letra.codePointAt(0);
@@ -180,6 +207,7 @@
                 if (j.ok) {
                     conectar(j.pantalla);
                     permitir(true);
+                    leerMayus();
                     estado(`Alta de Google · pantalla ${j.pantalla}`, 'ok');
                 } else {
                     permitir(false);

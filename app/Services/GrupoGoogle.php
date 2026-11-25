@@ -175,6 +175,50 @@ class GrupoGoogle
         }
     }
 
+    /** Pantalla (1…N, DISPLAY :10N) donde está abierto el Chrome de `correo`, o null si no está abierto. */
+    public static function pantallaDe(string $correo): ?int
+    {
+        $archivo = rtrim((string) config('zengpt.google.perfiles'), '/').'/.estado.json';
+        $estado = is_readable($archivo) ? json_decode((string) file_get_contents($archivo), true) : null;
+        foreach ((array) ($estado['pantallas'] ?? []) as $n => $pantalla) {
+            if (is_array($pantalla) && mb_strtolower((string) ($pantalla['correo'] ?? '')) === mb_strtolower(trim($correo))) {
+                return (int) $n;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Bloq Mayús de la pantalla del visor de `correo` (true = activado), o null si no tiene pantalla o no se pudo leer.
+     * Si alguien pica Bloq Mayús dentro del visor, la pantalla del servidor se queda en mayúsculas y «Pegar en el visor»
+     * escribiría el correo y la contraseña en mayúsculas.
+     */
+    public static function mayusculas(string $correo): ?bool
+    {
+        $n = self::pantallaDe($correo);
+        if ($n === null) {
+            return null;
+        }
+
+        $resultado = Process::timeout(5)->env(['DISPLAY' => ':'.(100 + $n)])->run([(string) config('zengpt.google.xset', 'xset'), '-q']);
+
+        return $resultado->successful() && preg_match('/Caps Lock:\s*(on|off)/', $resultado->output(), $m) === 1 ? $m[1] === 'on' : null;
+    }
+
+    /** Deja Bloq Mayús de esa pantalla como se pide (pulsa la tecla solo si hace falta) y devuelve cómo quedó. */
+    public static function fijarMayusculas(string $correo, bool $activar): ?bool
+    {
+        $actual = self::mayusculas($correo);
+        if ($actual === null || $actual === $activar) {
+            return $actual;
+        }
+
+        Process::timeout(5)->env(['DISPLAY' => ':'.(100 + (int) self::pantallaDe($correo))])->run([(string) config('zengpt.google.xdotool', 'xdotool'), 'key', 'Caps_Lock']);
+
+        return self::mayusculas($correo);
+    }
+
     /** La pestaña del visor sigue abierta: lo avisa cada minuto (así no se cierra su Chrome por olvidado). */
     public static function latido(string $correo): void
     {

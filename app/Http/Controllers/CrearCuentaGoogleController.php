@@ -66,6 +66,16 @@ class CrearCuentaGoogleController extends Controller
         return response()->noContent();
     }
 
+    /** Bloq Mayús de la pantalla de esta alta: GET lo lee; PUT con `activar` lo deja así. */
+    public function mayusculas(Request $request, string $clave): JsonResponse
+    {
+        $this->revisarClave($clave);
+        $correo = GrupoGoogle::correoAlta($clave);
+        $activadas = $request->isMethod('put') ? GrupoGoogle::fijarMayusculas($correo, $request->boolean('activar')) : GrupoGoogle::mayusculas($correo);
+
+        return response()->json(['activadas' => $activadas])->header('Cache-Control', 'no-store');
+    }
+
     /**
      * Con `ficha` (la pestaña se cerró): solo cierra el Chrome; el perfil se queda por si se vuelve a abrir. Sin ficha
      * («Cancelar»): cierra el Chrome y borra el perfil provisional.

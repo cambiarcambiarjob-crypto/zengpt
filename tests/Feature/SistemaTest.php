@@ -498,6 +498,46 @@ class SistemaTest extends TestCase
         $this->assertTrue($vieja->fresh()->isActive());
     }
 
+    public function test_el_visor_muestra_y_cambia_bloq_mayus_de_su_pantalla(): void
+    {
+        $perfiles = sys_get_temp_dir().'/zengpt-perfiles-'.uniqid();
+        mkdir($perfiles);
+        config(['zengpt.google.perfiles' => $perfiles]);
+        $cuenta = $this->cuenta(['email' => 'mayus@gmail.com']);
+        $sinPantalla = $this->cuenta(['email' => 'sin.pantalla@gmail.com']);
+        file_put_contents("{$perfiles}/.estado.json", json_encode(['pantallas' => [
+            '3' => ['correo' => 'mayus@gmail.com', 'pid' => 1, 'visor' => true, 'desde' => now()->getTimestamp() * 1000],
+            '4' => ['correo' => 'nueva-abcdefghijklmnop@crear.zengpt', 'pid' => 2, 'visor' => true, 'desde' => now()->getTimestamp() * 1000],
+        ]]));
+
+        // Una pantalla del servidor con Bloq Mayús activado: xset lo lee y xdotool pulsa la tecla.
+        $activado = ['3' => true, '4' => false];
+        $pulsadas = [];
+        Process::fake(function ($proceso) use (&$activado, &$pulsadas) {
+            $pantalla = substr((string) ($proceso->environment['DISPLAY'] ?? ''), -1);
+            if (in_array('key', (array) $proceso->command, true)) {
+                $pulsadas[] = $pantalla;
+                $activado[$pantalla] = ! $activado[$pantalla];
+
+                return Process::result('');
+            }
+
+            return Process::result("Keyboard Control:\n  00: Caps Lock:   ".($activado[$pantalla] ? 'on' : 'off')."    01: Num Lock:    off\n");
+        });
+
+        $this->actingAs($this->socio)->getJson("/google/visor/{$cuenta->id}/mayusculas")->assertOk()->assertExactJson(['activadas' => true]);
+        $this->actingAs($this->socio)->putJson("/google/visor/{$cuenta->id}/mayusculas", ['activar' => false])->assertExactJson(['activadas' => false]);
+        // Si ya está como se pide, no se pulsa la tecla otra vez.
+        $this->actingAs($this->socio)->putJson("/google/visor/{$cuenta->id}/mayusculas", ['activar' => false])->assertExactJson(['activadas' => false]);
+        $this->assertSame(['3'], $pulsadas);
+        Process::assertRan(fn ($p) => ($p->environment['DISPLAY'] ?? null) === ':103');
+
+        // El visor de «Crear cuenta» igual; una cuenta sin visor abierto no tiene pantalla.
+        $this->actingAs($this->socio)->putJson('/google/crear/abcdefghijklmnop/mayusculas', ['activar' => true])->assertExactJson(['activadas' => true]);
+        $this->actingAs($this->socio)->getJson("/google/visor/{$sinPantalla->id}/mayusculas")->assertExactJson(['activadas' => null]);
+        $this->actingAs($this->socio)->get("/google/visor/{$cuenta->id}")->assertSee('Bloq Mayús');
+    }
+
     public function test_los_visores_olvidados_se_cierran_solos_y_los_que_siguen_abiertos_no(): void
     {
         $perfiles = sys_get_temp_dir().'/zengpt-perfiles-'.uniqid();

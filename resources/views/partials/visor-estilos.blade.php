@@ -58,6 +58,7 @@
         .sacar-estado.ok #sacar-texto { color: var(--acento); }
         .sacar-estado.mal #sacar-texto { color: var(--peligro); }
         #sacar:disabled { opacity: .45; cursor: not-allowed; }
+        #mayus.activadas { border-color: var(--alerta); background: rgba(217,162,58,.14); color: var(--alerta); font-weight: 600; }
         button.peligro:hover { background: rgba(229,83,75,.12); border-color: var(--peligro); color: var(--peligro); }
         a { color: var(--acento); }
         @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-template-rows: 60vh auto; } aside { border-left: 0; border-top: 1px solid var(--borde); } }

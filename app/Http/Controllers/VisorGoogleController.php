@@ -43,6 +43,16 @@ class VisorGoogleController extends Controller
         return response()->noContent();
     }
 
+    /** Bloq Mayús de la pantalla de este visor: GET lo lee; PUT con `activar` lo deja así. */
+    public function mayusculas(Request $request, Account $account): JsonResponse
+    {
+        $activadas = $request->isMethod('put')
+            ? GrupoGoogle::fijarMayusculas($account->email, $request->boolean('activar'))
+            : GrupoGoogle::mayusculas($account->email);
+
+        return response()->json(['activadas' => $activadas])->header('Cache-Control', 'no-store');
+    }
+
     /** Código 2FA vigente y segundos que le quedan. */
     public function codigo(Account $account): JsonResponse
     {
