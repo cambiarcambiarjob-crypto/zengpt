@@ -5,11 +5,15 @@ namespace Tests\Feature;
 use App\Mail\InvitacionGrupo;
 use App\Models\Account;
 use App\Models\AdSpend;
+use App\Models\ChatgptSale;
 use App\Models\PartnerPayout;
 use App\Models\Seller;
 use App\Models\Slot;
 use App\Models\User;
+use App\Services\Chatgpt;
 use App\Services\GrupoGoogle;
+use App\Services\PagosSocio;
+use App\Services\PagosVendedor;
 use App\Services\Resumen;
 use App\Support\Hoy;
 use App\Support\Presentar;
@@ -496,6 +500,47 @@ class SistemaTest extends TestCase
         $this->actingAs($this->socio)->put("/cuentas/{$vieja->id}/activar")->assertSessionHas('success');
         $this->assertSame(Hoy::fecha(), $vieja->fresh()->started_on->toDateString());
         $this->assertTrue($vieja->fresh()->isActive());
+    }
+
+    public function test_chatgpt_de_jorge_suma_sus_ventas_y_le_carga_los_400_de_cada_dia_6(): void
+    {
+        $this->travelTo(Carbon::parse('2026-12-10 12:00', 'America/Chihuahua'));
+        $jorge = $this->vendedor('Jorge');
+
+        // En el corte se anota cuántos se vendieron: $450 o personalizado. Solo días que ya pasaron.
+        $this->actingAs($this->socio)->post('/chatgpt', ['sold_on' => '2026-11-26', 'quantity' => 3, 'price' => 450])->assertSessionHas('success', 'Se anotaron 3 ChatGPT del 26 de noviembre.');
+        $this->actingAs($this->admin)->post('/chatgpt', ['sold_on' => '2026-12-08', 'quantity' => 2, 'price' => 500])->assertSessionHas('success');
+        $this->actingAs($this->socio)->post('/chatgpt', ['sold_on' => '2026-12-11', 'quantity' => 1, 'price' => 450])->assertSessionHasErrors('sold_on');
+        $this->actingAs($this->socio)->post('/chatgpt', ['sold_on' => '2026-12-09', 'quantity' => 0, 'price' => 450])->assertSessionHasErrors('quantity');
+        $this->assertSame([$jorge->id], ChatgptSale::query()->distinct()->pluck('seller_id')->all());
+
+        // Los $400 se pagan cada día 6 desde el periodo de la primera venta (6 nov) y hasta hoy (el 6 ene aún no llega).
+        $this->assertSame(['2026-11-06', '2026-12-06'], Chatgpt::pagos('2026-11-01', '2027-01-31'));
+        $this->assertSame('2027-01-06', Chatgpt::siguientePago());
+
+        // Mismo reparto que Gemini: neto = ventas − publicidad − costo; socio 10 %, el resto mitad Jorge y mitad Leo.
+        $fila = collect(Resumen::porVendedor('2026-11-01', '2026-12-10')['filas'])->firstWhere('name', 'Jorge');
+        $this->assertSame([5, 235000, 80000, 155000, 15500, 69750, 69750], [$fila['ventas_count'], $fila['ventas'], $fila['costo'], $fila['neto'], $fila['socio'], $fila['vendedor'], $fila['dueno']]);
+        $serie = collect(Resumen::serieDiaria('2026-11-01', '2026-12-10'))->keyBy('fecha');
+        $this->assertSame([40000, 135000, 40000, 100000], [$serie['2026-11-06']['costo'], $serie['2026-11-26']['ventas'], $serie['2026-12-06']['costo'], $serie['2026-12-08']['ventas']]);
+
+        // Entra también en lo que se le debe a Jorge y al socio (Corte).
+        $this->assertSame(['ventas_count' => 5, 'ventas' => 235000, 'costo' => 80000, 'publicidad' => 0], PagosVendedor::sumas($jorge, '2026-11-01', '2026-12-10'));
+        $this->assertSame(40000, PagosVendedor::porDia($jorge, '2026-12-01', '2026-12-10')['2026-12-06']['costo']);
+        $this->assertSame(15500, PagosSocio::estado()['pendiente']);
+
+        // El Día lo muestra en su corte (y avisa del pago el día 6); la pantalla de ChatGPT, por mes.
+        $this->actingAs($this->socio)->get('/dia/2026-12-06')->assertInertia(fn (Assert $p) => $p->where('chatgpt.pago', 40000)->has('chatgpt.registros', 0)->where('chatgpt.vendedor', 'Jorge'));
+        $this->actingAs($this->socio)->get('/dia/2026-11-26')->assertInertia(fn (Assert $p) => $p->where('chatgpt.pago', 0)->where('chatgpt.registros.0.total', 135000));
+        $this->actingAs($this->socio)->get('/chatgpt?mes=2026-11')->assertInertia(fn (Assert $p) => $p->component('Chatgpt/Index')
+            ->where('resumen.vendidos', 3)->where('resumen.ventas', 135000)->where('resumen.costo', 40000)->where('pagos', ['2026-11-06'])->where('siguiente', '2026-12')->has('dias', 1));
+        $this->actingAs($this->socio)->get('/chatgpt')->assertInertia(fn (Assert $p) => $p->where('mes', '2026-12')->where('siguiente', null)->where('precio', 45000));
+
+        // Se puede quitar un registro; y si se configura desde cuándo se paga, manda esa fecha.
+        $this->actingAs($this->socio)->delete('/chatgpt/'.ChatgptSale::query()->whereDate('sold_on', '2026-12-08')->value('id'))->assertSessionHas('success');
+        $this->assertSame(3, (int) ChatgptSale::query()->sum('quantity'));
+        config(['zengpt.chatgpt.desde' => '2026-12-06']);
+        $this->assertSame(['2026-12-06'], Chatgpt::pagos('2026-11-01', '2026-12-31'));
     }
 
     public function test_el_visor_muestra_y_cambia_bloq_mayus_de_su_pantalla(): void

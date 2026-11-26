@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Models\AdSpend;
+use App\Models\ChatgptSale;
 use App\Models\Seller;
 use App\Models\Slot;
+use App\Services\Chatgpt;
 use App\Services\Resumen;
 use App\Support\Hoy;
 use App\Support\Presentar;
@@ -35,6 +37,14 @@ class DayController extends Controller
                 ->filter(fn (Seller $s): bool => $s->active || isset($gastos[$s->id]))
                 ->map(fn (Seller $s): array => ['seller_id' => $s->id, 'name' => $s->name, 'amount_cents' => (int) ($gastos[$s->id] ?? 0)])->values()->all(),
             'reparto' => Resumen::porVendedor($fecha, $fecha),
+            // ChatGPT de Jorge en este corte: lo anotado y si este día toca el pago fijo del día 6.
+            'chatgpt' => [
+                'registros' => ChatgptSale::query()->with('creator:id,name')->whereDate('sold_on', $fecha)->orderBy('id')->get()
+                    ->map(fn (ChatgptSale $r): array => ChatgptController::registro($r))->all(),
+                'precio' => Chatgpt::precio(),
+                'pago' => in_array($fecha, Chatgpt::pagos($fecha, $fecha), true) ? Chatgpt::costoMensual() : 0,
+                'vendedor' => Chatgpt::vendedor()?->name,
+            ],
             'puedeEditarPublicidad' => $request->user()->isAdmin(),
             'vendedores' => Seller::query()->where('active', true)->ordered()->get(['id', 'name', 'is_owner']),
             'conEspacio' => Account::query()->active()->with('slots.seller')->orderBy('expires_on')->get()

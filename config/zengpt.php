@@ -13,6 +13,19 @@ return [
     // Lo que cuesta cada cuenta (pesos). A cada espacio vendido se le carga la parte proporcional (costo ÷ capacidad)
     // y se descuenta del neto del vendedor, igual que la publicidad.
     'costo_cuenta' => 117,
+    /*
+    | ChatGPT (solo los vende Jorge): en el corte del día se anota cuántos se vendieron ($450 o personalizado; el cliente
+    | renueva cada mes y cada renovación es otra venta). Se pagan $400 fijos el día 6 de cada mes, sin importar cuántos se
+    | vendan: ese pago es el costo de ChatGPT y se descuenta del neto de Jorge ese día (mismo reparto que Gemini).
+    | `desde`: primer día 6 que se pagó (Y-m-d); vacío = el día 6 del periodo de la primera venta anotada.
+    */
+    'chatgpt' => [
+        'vendedor' => env('ZENGPT_CHATGPT_VENDEDOR', 'Jorge'),
+        'precio' => 450,
+        'costo_mensual' => 400,
+        'dia_pago' => 6,
+        'desde' => env('ZENGPT_CHATGPT_DESDE'),
+    ],
     // Porcentaje del socio (Christian) sobre la ganancia después de publicidad.
     'porcentaje_socio' => 10,
     // Porcentaje del vendedor sobre lo que queda después del socio (el resto es del dueño).

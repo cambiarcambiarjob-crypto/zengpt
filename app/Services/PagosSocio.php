@@ -141,6 +141,12 @@ final class PagosSocio
                 $sumas[(int) $fila->seller_id]['publicidad'] = (int) $fila->total;
             });
 
+        foreach (Chatgpt::porVendedor($desde, $hasta) as $sellerId => $mov) {
+            $sumas[$sellerId] ??= self::CEROS;
+            $sumas[$sellerId]['ventas'] += $mov['ventas'];
+            $sumas[$sellerId]['costo'] += $mov['costo'];
+        }
+
         return $sumas;
     }
 
@@ -165,6 +171,14 @@ final class PagosSocio
                 $dias[$f][(int) $gasto->seller_id] ??= self::CEROS;
                 $dias[$f][(int) $gasto->seller_id]['publicidad'] += $gasto->amount_cents;
             });
+
+        foreach (Chatgpt::porDia($desde, $hasta) as $f => $vendedores) {
+            foreach ($vendedores as $sellerId => $mov) {
+                $dias[$f][$sellerId] ??= self::CEROS;
+                $dias[$f][$sellerId]['ventas'] += $mov['ventas'];
+                $dias[$f][$sellerId]['costo'] += $mov['costo'];
+            }
+        }
 
         ksort($dias);
 

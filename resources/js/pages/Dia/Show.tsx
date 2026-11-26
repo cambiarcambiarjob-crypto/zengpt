@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useCallback, useRef, useState } from 'react';
+import { ChatgptDia } from '@/components/chatgpt/ChatgptCorte';
 import { AgregarVenta } from '@/components/dia/AgregarVenta';
 import { ModalVenta } from '@/components/dia/ModalVenta';
 import { NavegadorFecha } from '@/components/dia/NavegadorFecha';
@@ -26,7 +27,7 @@ import type { DiaProps } from '@/types';
  * cuentan del valor anterior al nuevo y solo las secciones con estado propio (publicidad, listas) se rehacen con `key`.
  */
 export default function DiaShow() {
-    const { fecha, anterior, siguiente, esHoy, ventas, publicidad, reparto, puedeEditarPublicidad, vendedores, conEspacio, auth, negocio } = usePagina<DiaProps>();
+    const { fecha, anterior, siguiente, esHoy, ventas, publicidad, reparto, puedeEditarPublicidad, vendedores, conEspacio, chatgpt, auth, negocio } = usePagina<DiaProps>();
     const esAdmin = auth.user?.is_admin ?? false;
     const nombreDueno = reparto.filas.find((fila) => fila.is_owner)?.name ?? vendedores.find((vendedor) => vendedor.is_owner)?.name ?? 'Dueño';
 
@@ -118,7 +119,11 @@ export default function DiaShow() {
                     />
                 </Aparecer>
 
-                <Aparecer key={`agregar-${fecha}`} indice={4} className="xl:col-span-12">
+                <Aparecer key={`chatgpt-${fecha}`} indice={4} className="xl:col-span-12">
+                    <ChatgptDia fecha={fecha} hoy={negocio.hoy} chatgpt={chatgpt} />
+                </Aparecer>
+
+                <Aparecer key={`agregar-${fecha}`} indice={5} className="xl:col-span-12">
                     <AgregarVenta cuentas={conEspacio} fecha={fecha} esHoy={esHoy} alElegir={(cuenta) => setVenta({ cuenta: cuenta.id })} />
                 </Aparecer>
             </div>

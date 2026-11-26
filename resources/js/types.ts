@@ -88,6 +88,25 @@ export interface DiaProps {
     puedeEditarPublicidad: boolean;
     vendedores: Vendedor[];
     conEspacio: Cuenta[];
+    /** ChatGPT de Jorge en este corte: lo anotado y `pago` (centavos) si este día toca el pago fijo del día 6. */
+    chatgpt: ChatgptCorte;
+}
+
+/** Un registro de ChatGPT en un corte: cuántos y a qué precio (centavos). */
+export interface RegistroChatgpt { id: number; quantity: number; price_cents: number; total: number; registrado_por: string | null }
+
+export interface ChatgptCorte { registros: RegistroChatgpt[]; precio: number; pago: number; vendedor: string | null }
+
+/** Apartado ChatGPT: un mes (`YYYY-MM`) con lo vendido por día y los pagos del día 6 (su costo). */
+export interface ChatgptProps {
+    mes: string; anterior: string; siguiente: string | null;
+    vendedor: { id: number; name: string } | null;
+    precio: number; costo_mensual: number; dia_pago: number; siguiente_pago: string;
+    /** Días de pago del mes que ya pasaron (Y-m-d). */
+    pagos: string[];
+    /** Lo de ChatGPT en el mes, sin publicidad: neto = ventas − pagos; socio, vendedor (Jorge) y dueño como en Gemini. */
+    resumen: Omit<Totales, 'ventas_count'> & { vendidos: number };
+    dias: { fecha: string; vendidos: number; ventas: number; registros: RegistroChatgpt[] }[];
 }
 
 /** Lo que el dueño le debe HOY a un vendedor: su parte acumulada menos lo ya pagado (no depende del periodo elegido). */

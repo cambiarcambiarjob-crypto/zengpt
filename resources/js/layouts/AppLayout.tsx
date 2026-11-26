@@ -1,5 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { CalendarDays, ChartColumn, CircleUserRound, Ellipsis, Layers, LayoutDashboard, LogOut, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { Bot, CalendarDays, ChartColumn, CircleUserRound, Ellipsis, Layers, LayoutDashboard, LogOut, Users, Wallet, type LucideIcon } from 'lucide-react';
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { useSerpiente } from '@/components/easter/useSerpiente';
 import ClickSpark from '@/components/reactbits/ClickSpark';
@@ -33,6 +33,7 @@ const DESTINOS: Destino[] = [
     { href: '/dia', etiqueta: 'Día', icono: CalendarDays },
     { href: '/reportes', etiqueta: 'Reportes', icono: ChartColumn },
     { href: '/corte', etiqueta: 'Corte', icono: Wallet },
+    { href: '/chatgpt', etiqueta: 'ChatGPT', icono: Bot, secundario: true },
     { href: '/vendedores', etiqueta: 'Vendedores', icono: Users, soloAdmin: true, secundario: true },
     { href: '/perfil', etiqueta: 'Perfil', icono: CircleUserRound, secundario: true },
 ];

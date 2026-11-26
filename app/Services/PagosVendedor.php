@@ -35,10 +35,13 @@ final class PagosVendedor
             ->whereDate('paid_on', '>=', $desde)->whereDate('paid_on', '<=', $hasta)
             ->selectRaw('COUNT(*) as n, COALESCE(SUM(price_cents), 0) as total, COALESCE(SUM(cost_cents), 0) as costo')->first();
 
+        // ChatGPT: sus ventas y el pago de cada día 6 (si este vendedor es el de ChatGPT).
+        $chatgpt = Chatgpt::porVendedor($desde, $hasta)[$seller->id] ?? ['ventas_count' => 0, 'ventas' => 0, 'costo' => 0];
+
         return [
-            'ventas_count' => (int) ($ventas->n ?? 0),
-            'ventas' => (int) ($ventas->total ?? 0),
-            'costo' => (int) ($ventas->costo ?? 0),
+            'ventas_count' => (int) ($ventas->n ?? 0) + $chatgpt['ventas_count'],
+            'ventas' => (int) ($ventas->total ?? 0) + $chatgpt['ventas'],
+            'costo' => (int) ($ventas->costo ?? 0) + $chatgpt['costo'],
             'publicidad' => (int) AdSpend::query()->where('seller_id', $seller->id)
                 ->whereDate('spent_on', '>=', $desde)->whereDate('spent_on', '<=', $hasta)->sum('amount_cents'),
         ];
@@ -85,6 +88,15 @@ final class PagosVendedor
                 $dias[$f] ??= self::CEROS;
                 $dias[$f]['publicidad'] += $gasto->amount_cents;
             });
+
+        foreach (Chatgpt::porDia($desde, $hasta, $seller->id) as $f => $vendedores) {
+            foreach ($vendedores as $mov) {
+                $dias[$f] ??= self::CEROS;
+                $dias[$f]['ventas_count'] += $mov['ventas_count'];
+                $dias[$f]['ventas'] += $mov['ventas'];
+                $dias[$f]['costo'] += $mov['costo'];
+            }
+        }
 
         ksort($dias);
 

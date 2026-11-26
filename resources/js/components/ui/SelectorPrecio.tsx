@@ -13,6 +13,8 @@ export interface SelectorPrecioProps {
     error?: string | null;
     ayuda?: ReactNode;
     deshabilitado?: boolean;
+    /** Muestra «Reposición» ($0, cuenta como cliente sin sumar a ventas). Solo tiene sentido en espacios de Gemini. */
+    conReposicion?: boolean;
     className?: string;
 }
 
@@ -26,10 +28,10 @@ const OPCION =
  *
  *   <SelectorPrecio valor={form.data.price} alCambiar={(pesos) => form.setData('price', pesos)} precios={negocio.precios} error={form.errors.price} />
  */
-export function SelectorPrecio({ valor, alCambiar, precios = [200, 400, 500], etiqueta = 'Precio', error, ayuda, deshabilitado = false, className }: SelectorPrecioProps) {
+export function SelectorPrecio({ valor, alCambiar, precios = [200, 400, 500], etiqueta = 'Precio', error, ayuda, deshabilitado = false, conReposicion = true, className }: SelectorPrecioProps) {
     const id = useId();
     const entrada = useRef<HTMLInputElement>(null);
-    const esReposicion = valor !== '' && Number(valor) === 0;
+    const esReposicion = conReposicion && valor !== '' && Number(valor) === 0;
     const esSugerido = esReposicion || (valor !== '' && precios.includes(Number(valor)));
     const [otro, setOtro] = useState(valor !== '' && !esSugerido);
     const enfocarOtro = useRef(false);
@@ -48,7 +50,11 @@ export function SelectorPrecio({ valor, alCambiar, precios = [200, 400, 500], et
 
     return (
         <EnvolturaCampo id={`${id}-otro`} etiqueta={etiqueta} error={error} ayuda={ayuda} className={className}>
-            <div role="radiogroup" aria-label={typeof etiqueta === 'string' ? etiqueta : 'Precio'} className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            <div
+                role="radiogroup"
+                aria-label={typeof etiqueta === 'string' ? etiqueta : 'Precio'}
+                className={cn('grid grid-cols-3 gap-2', precios.length + (conReposicion ? 2 : 1) > 3 && 'sm:grid-cols-5')}
+            >
                 {precios.map((precio) => (
                     <label key={precio} className="relative">
                         <input
@@ -65,22 +71,24 @@ export function SelectorPrecio({ valor, alCambiar, precios = [200, 400, 500], et
                         <span className={cn(OPCION, 'cifras')}>${precio}</span>
                     </label>
                 ))}
-                <label className="relative">
-                    <input
-                        type="radio"
-                        name={`${id}-precio`}
-                        className="peer sr-only"
-                        checked={!otro && esReposicion}
-                        disabled={deshabilitado}
-                        onChange={() => {
-                            setOtro(false);
-                            alCambiar('0');
-                        }}
-                    />
-                    <span className={OPCION} title="Cuenta como cliente, pero con $0: no suma a las ventas">
-                        Reposición
-                    </span>
-                </label>
+                {conReposicion && (
+                    <label className="relative">
+                        <input
+                            type="radio"
+                            name={`${id}-precio`}
+                            className="peer sr-only"
+                            checked={!otro && esReposicion}
+                            disabled={deshabilitado}
+                            onChange={() => {
+                                setOtro(false);
+                                alCambiar('0');
+                            }}
+                        />
+                        <span className={OPCION} title="Cuenta como cliente, pero con $0: no suma a las ventas">
+                            Reposición
+                        </span>
+                    </label>
+                )}
                 <label className="relative">
                     <input
                         type="radio"

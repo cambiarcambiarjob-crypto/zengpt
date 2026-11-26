@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ChatgptController;
 use App\Http\Controllers\CorteController;
 use App\Http\Controllers\CrearCuentaGoogleController;
 use App\Http\Controllers\DashboardController;
@@ -59,6 +60,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('/pagos-vendedores/{pago}', [VendedorReporteController::class, 'deshacer'])->middleware('admin')->name('reportes.vendedor.deshacer');
 
     // Corte: lo que se le debe a cada quien (socio y vendedores) y lo pagado. Pagar es del administrador.
+    // ChatGPT de Jorge: cuántos se vendieron en cada corte; los $400 de cada día 6 son su costo.
+    Route::get('/chatgpt', [ChatgptController::class, 'index'])->name('chatgpt.index');
+    Route::post('/chatgpt', [ChatgptController::class, 'store'])->name('chatgpt.store');
+    Route::delete('/chatgpt/{venta}', [ChatgptController::class, 'destroy'])->name('chatgpt.destroy');
+
     Route::get('/corte', [CorteController::class, 'index'])->name('corte.index');
     Route::post('/corte/socio/pagos', [CorteController::class, 'pagarSocio'])->middleware('admin')->name('corte.socio.pagar');
     Route::delete('/corte/socio/pagos/{pago}', [CorteController::class, 'deshacerSocio'])->middleware('admin')->name('corte.socio.deshacer');
